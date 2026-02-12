@@ -1,0 +1,66 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Logs
+*.log
+logs/
+
+# Local environment files
+.env
+.env.*
+
+# ===== Node / Next.js =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+.next/
+dist/
+out/
+build/
+
+# Next static export
+export/
+
+# Node environment files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ===== OS / Editor =====
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ===== Chroma DB =====
+chroma/
+chromadb/
+chroma_db/
+db/
+vectorstore/
+index/
+
+# ===== Application Data =====
+uploads/
+chroma_langchain_db/
+
+# ===== Testing =====
+.pytest_cache/

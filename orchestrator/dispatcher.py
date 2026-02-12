@@ -1,0 +1,106 @@
+import sys
+
+from common.router import route_query
+from common.rag_tool import rag_search
+
+from orchestrator.agent import run_axon
+from orchestrator.qwen_agent import run_qwen, summarize_tool_output
+from orchestrator.tool_dispatcher import dispatch_tool
+from orchestrator.agent import (
+    MARKER_FINAL_START,
+    MARKER_FINAL_END,
+    stream_text_word_by_word,
+)
+
+PROFANITY_FALLBACK = (
+    "Please use respectful and professional language while interacting with Axon."
+)
+
+TEST_MODE = False
+
+
+async def run_agent(query: str):
+    # print("ROUTE QUERY RECEIVED:", query)
+    # route = await route_query(query)
+    # print("ROUTE DECIDED:", route)
+
+    # -------------------------
+    # TEST MODE
+    # -------------------------
+    if TEST_MODE:
+        q = query.lower()
+
+        if "who are you" in q:
+            return "I am Axon, the ERP assistant for Agnikul."
+
+        if any(x in q for x in ["fuck", "bitch", "nigga"]):
+            return PROFANITY_FALLBACK
+
+        if "translate" in q and "good morning" in q:
+            return "Good morning in Tamil is காலை வணக்கம்."
+
+        if any(x in q for x in ["hi", "hello", "hey"]):
+            return "Hello, I am Axon, the ERP assistant for Agnikul."
+
+        return "I am here to help."
+
+    # -------------------------
+    # REAL EXECUTION PATH
+    # -------------------------
+    route = await route_query(query)
+
+    if route == "PROFANITY":
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(PROFANITY_FALLBACK)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return PROFANITY_FALLBACK
+
+    if route.startswith("GREETING_RESPONSE:"):
+        greeting_response = route.split(":", 1)[1]
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(greeting_response)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return greeting_response
+
+    if route == "RAG":
+        result = rag_search(query)
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(result)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return result
+
+    if route == "QWEN":
+        result = await run_qwen(query)
+
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(result)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return result
+
+
+    if route == "TOOLS":
+        tool_name, tool_result = await dispatch_tool(query)
+
+        if tool_name == "arxiv":
+            result = tool_result
+        else:
+            result = await summarize_tool_output(
+            user_query=query,
+            tool_name=tool_name,
+            tool_data=tool_result
+        )
+
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(str(result).strip())
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return result
+
+    # -------------------------
+    # DEFAULT: AXON
+    # -------------------------
+    return await run_axon(query)

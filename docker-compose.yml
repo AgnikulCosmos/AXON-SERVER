@@ -1,0 +1,48 @@
+services:
+  orchestrator:
+    build:
+      context: .
+      dockerfile: orchestrator/Dockerfile
+    ports:
+      - "8004:8000"
+    volumes:
+      - .:/app
+      - ./chroma_langchain_db:/app/chroma_langchain_db
+    depends_on:
+      - wiki
+      - arxiv
+      - ddgs
+      - ollama
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+
+  wiki:
+    build:
+      context: .
+      dockerfile: services/wiki/Dockerfile
+    ports:
+      - "8002:8002"
+
+  arxiv:
+    build:
+      context: . 
+      dockerfile: services/arxiv/Dockerfile
+    ports:
+      - "8003:8003"
+
+  ddgs:
+    build:
+      context: .
+      dockerfile: services/ddgs/Dockerfile
+    ports:
+      - "8005:8005"
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+      - /home/harinit-automation/Documents/axon_5.6:/models/axon_5.6:ro
+    restart: unless-stopped
+
+volumes:
+  ollama_data:

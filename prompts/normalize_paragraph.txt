@@ -1,0 +1,8 @@
+Rewrite the following content into a concise, factual form.
+- Preserve all important meaning
+- Remove redundancy
+- Do not add new information
+- Do not summarize too aggressively
+
+Output ONLY plain text.
+No explanations.

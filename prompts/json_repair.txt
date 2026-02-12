@@ -1,0 +1,15 @@
+You previously generated an invalid JSON array.
+
+Your task is to FIX the JSON so that it is:
+- Valid JSON
+- A JSON array
+- Contains the same data
+- No content added or removed
+
+Rules:
+- Output ONLY the corrected JSON array
+- No explanations
+- No markdown
+- No text outside JSON
+
+Here is the invalid JSON:
