@@ -12,11 +12,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-#from agent import run_agent, MARKER_REASONING_START, MARKER_REASONING_END, MARKER_TOOL_START, MARKER_TOOL_END, MARKER_FINAL_START, MARKER_FINAL_END
-from tools.registry import TOOLS
-
-from dispatcher import run_agent
-from agent import (
+from orchestrator.dispatcher import run_agent
+from orchestrator.agent import (
     MARKER_REASONING_START,
     MARKER_REASONING_END,
     MARKER_TOOL_START,
@@ -214,12 +211,10 @@ async def stream_query(request: Request):
 @app.get("/v1/tools")
 def tools_list():
     """List available tools."""
+    from orchestrator.tool_dispatcher import TOOL_ENDPOINTS
     tools = [
-        {
-            "name": t.name,
-            "description": t.description if hasattr(t, "description") else ""
-        }
-        for t in TOOLS
+        {"name": name, "description": f"Endpoint: {url}"}
+        for name, url in TOOL_ENDPOINTS.items()
     ]
     return {"tools": tools}
 

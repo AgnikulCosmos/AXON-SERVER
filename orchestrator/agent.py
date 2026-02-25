@@ -99,8 +99,6 @@ async def run_axon(question: str, max_iterations: int = 5) -> str:
     Uses astream_events for unified streaming of reasoning, tool calls, and responses.
 
     """
-    print("AXON LLM BASE URL:", llm.base_url)
-    print("AXON MODEL:", llm.model)
 
     messages = [HumanMessage(content=question)]
     
