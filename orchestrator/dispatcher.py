@@ -1,4 +1,5 @@
 import sys
+import json
 
 from common.router import route_query
 from common.rag_tool import rag_search
@@ -6,6 +7,8 @@ from common.rag_tool import rag_search
 from orchestrator.agent import run_axon
 from orchestrator.qwen_agent import run_qwen, summarize_tool_output
 from orchestrator.tool_dispatcher import dispatch_tool
+from orchestrator.erp_tool_dispatcher import prepare_tool_call
+from orchestrator.planning import router_pipeline
 from orchestrator.agent import (
     MARKER_FINAL_START,
     MARKER_FINAL_END,
@@ -66,6 +69,27 @@ async def run_agent(query: str):
 
     if route == "RAG":
         result = rag_search(query)
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(result)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return result
+
+    if route.startswith("ERP_ROUTE:"):
+        # ── Run the full Semantic Router Pipeline ──────────────
+        plan = router_pipeline.process(query)
+
+        if plan:
+            tool_call = prepare_tool_call(plan)
+
+            result = json.dumps({
+                "route_name": plan["route_name"],
+                "method": plan["method"],
+                "filters": plan["filters"],
+            }, indent=2)
+        else:
+            result = "No matching ERP route could be resolved for your query."
+
         sys.stdout.write(f"{MARKER_FINAL_START}\n")
         await stream_text_word_by_word(result)
         sys.stdout.write(f"{MARKER_FINAL_END}\n")

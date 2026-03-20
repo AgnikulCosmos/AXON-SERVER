@@ -1,6 +1,7 @@
 from langchain_ollama import ChatOllama
 from common.safety import contains_profanity
 from common.greeting import is_greeting
+from orchestrator.planning.semantic_router import SemanticRouter
 import json
 import re
 
@@ -10,6 +11,7 @@ router_llm = ChatOllama(
     temperature=0
 )
 
+erp_semantic_router = SemanticRouter()
 
 ROUTER_PROMPT = """
 You are a strict intent router for an enterprise AI system.
@@ -153,7 +155,7 @@ async def generate_greeting_response(query: str) -> str:
 # -----------------------------
 INTENT_TO_ROUTE = {
     "GREETING": "GREETING",
-    "ERP": "RAG",
+    "ERP": "ERP",
     "COMPANY": "RAG",
     "GENERAL": "QWEN",
     "TOOLS": "TOOLS"
@@ -185,7 +187,19 @@ async def route_query(query: str) -> str:
         intent = data.get("intent", "GENERAL")
 
         route = INTENT_TO_ROUTE.get(intent, "TOOLS")
-        # print("ROUTE DECIDED:", route)
+
+        # -------------------------
+        # ERP → Semantic Route Match
+        # -------------------------
+        if route == "ERP":  # ERP or COMPANY both map to RAG
+            erp_match = erp_semantic_router.match(query)
+
+            if erp_match:
+                route_name = erp_match["route"]["route_name"]
+                return f"ERP_ROUTE:{route_name}"
+
+            # If no semantic match, fallback to normal RAG
+            return "RAG"
 
         return route
 
