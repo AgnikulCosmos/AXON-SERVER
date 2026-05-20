@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 _response_llm = ChatOllama(
-    model="qwen2.5:3b",
+    model="qwen2.5:0.5b",
     base_url=OLLAMA_URL,
     temperature=0,
     streaming=False,

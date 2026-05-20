@@ -50,6 +50,15 @@ async def run_agent(query: str):
     # -------------------------
     # REAL EXECUTION PATH
     # -------------------------
+    q = query.lower().strip("!?.,")
+    if "who are you" in q or q == "what is your name" or q == "who is axon" or "what can axon help" in q or "what can you do" in q:
+        identity_response = "I am Axon, your friendly internal ERP AI Assistant at Agnikul Cosmos! I can help you with internal systems, HR, payroll, operations, organizational structure, and enterprise workflows."
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(identity_response)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return identity_response
+
     route = await route_query(query)
 
     if route == "PROFANITY":

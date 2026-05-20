@@ -4,10 +4,12 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 
+import os
+
 TOOL_ENDPOINTS = {
-    "wiki": "http://wiki:8002/query",
-    "ddgs": "http://ddgs:8005/query",
-    "arxiv": "http://arxiv:8003/query",
+    "wiki": os.getenv("WIKI_URL", "http://wiki:8002/query"),
+    "ddgs": os.getenv("DDGS_URL", "http://ddgs:8005/query"),
+    "arxiv": os.getenv("ARXIV_URL", "http://arxiv:8003/query"),
 }
 
 async def dispatch_tool(query: str):

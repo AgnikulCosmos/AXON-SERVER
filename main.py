@@ -9,7 +9,7 @@ import argparse
 import asyncio
 import uvicorn
 
-from dispatcher import run_agent
+from orchestrator.dispatcher import run_agent
 
 
 async def cli_mode(question: str):

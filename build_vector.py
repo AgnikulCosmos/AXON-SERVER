@@ -5,12 +5,12 @@ import json
 import os
 
 DATASET_PATH = "dataset.json"
-DB_PATH = "./chroma_langchain_db"
+DB_PATH = "./chroma_langchain_db_user"
 COLLECTION_NAME = "agnikul_data"
 
 embeddings = OllamaEmbeddings(
     model="mxbai-embed-large",
-    base_url="http://ollama:11434"
+    base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 )
 
 

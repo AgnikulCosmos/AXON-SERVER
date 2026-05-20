@@ -20,6 +20,7 @@ from orchestrator.agent import (
     MARKER_FINAL_END,
 )
 
+# Triggering hot-reload to apply HNSW dummy query self-healing fixes
 app = FastAPI()
 
 app.add_middleware(
@@ -30,15 +31,69 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+async def startup_event():
+    import logging
+    logger = logging.getLogger("orchestrator")
+    logger.info("FastAPI startup: Bootstrapping Ollama models...")
+    
+    models_to_pull = ["mxbai-embed-large", "qwen2.5:0.5b", "axon-5.6:latest"]
+    for model in models_to_pull:
+        try:
+            logger.info(f"Ensuring Ollama model '{model}' is pulled...")
+            async with httpx.AsyncClient(timeout=600.0) as client:
+                resp = await client.post(
+                    f"{OLLAMA_BASE_URL}/api/pull",
+                    json={"name": model, "stream": False}
+                )
+                resp.raise_for_status()
+            logger.info(f"Model '{model}' is ready.")
+        except Exception as e:
+            logger.error(f"Failed to ensure model '{model}': {e}")
+
+@app.get("/health")
+async def health():
+    """Health check endpoint with Ollama model list."""
+    ollama_models = []
+    ollama_status = "unknown"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
+            if resp.status_code == 200:
+                ollama_status = "ok"
+                models_data = resp.json().get("models", [])
+                ollama_models = [m.get("name") for m in models_data]
+            else:
+                ollama_status = f"error: {resp.status_code}"
+    except Exception as e:
+        ollama_status = f"failed: {str(e)}"
+
+    return {
+        "status": "ok",
+        "version": "1.0",
+        "ollama_status": ollama_status,
+        "ollama_models": ollama_models
+    }
+
 from typing import Optional
 
 DEFAULT_TIMEOUT = 1000
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-TITLE_MODEL = "qwen2.5:3b"
+TITLE_MODEL = "qwen2.5:0.5b"
 
 class QueryRequest(BaseModel):
-    query: str
+    query: Optional[str] = None
+    question: Optional[str] = None
+    message: Optional[str] = None
+    content: Optional[str] = None
+    text: Optional[str] = None
     timeout: Optional[int] = DEFAULT_TIMEOUT
+
+    def normalized_query(self) -> str:
+        for value in (self.query, self.question, self.message, self.content, self.text):
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
 
 class TitleGenerationRequest(BaseModel):
     messages: list  # [{"role": "...", "content": "..."}]
@@ -53,7 +108,11 @@ class TitleGenerationRequest(BaseModel):
 
 @app.post("/v1/query")
 async def query_api(req: QueryRequest):
-    result = await run_agent(req.query)
+    question = req.normalized_query()
+    if not question:
+        raise HTTPException(status_code=400, detail="`query` must be a non-empty string.")
+
+    result = await run_agent(question)
     return {"response": result}
 
 
@@ -226,7 +285,16 @@ def sse_event(data: str, event_type: str | None = None) -> str:
 async def stream_query(request: Request):
 
     body = await request.json()
-    question = body.get("query", "")
+    question = (
+        body.get("query")
+        or body.get("question")
+        or body.get("message")
+        or body.get("content")
+        or body.get("text")
+        or ""
+    )
+    if isinstance(question, str):
+        question = question.strip()
 
     if not question:
         raise HTTPException(status_code=400, detail="Query cannot be empty")
@@ -308,6 +376,42 @@ async def stream_query(request: Request):
                                     yield sse_event(cleaned, current_section or "output")
             
             await task
+
+            captured_output.seek(0)
+            remaining_text = captured_output.read()
+            if len(remaining_text) > last_pos:
+                new_text = remaining_text[last_pos:]
+                last_pos = len(remaining_text)
+
+                parts = split_regex.split(new_text)
+
+                for part in parts:
+                    if not part:
+                        continue
+
+                    if part == MARKER_REASONING_START:
+                        yield sse_event("", "reasoning_start")
+                        current_section = "reasoning"
+                    elif part == MARKER_REASONING_END:
+                        yield sse_event("", "reasoning_end")
+                        current_section = None
+                    elif part == MARKER_TOOL_START:
+                        yield sse_event("", "tool_start")
+                        current_section = "tool"
+                    elif part == MARKER_TOOL_END:
+                        yield sse_event("", "tool_end")
+                        current_section = None
+                    elif part == MARKER_FINAL_START:
+                        yield sse_event("", "final_start")
+                        current_section = "final"
+                    elif part == MARKER_FINAL_END:
+                        yield sse_event("", "final_end")
+                        current_section = None
+                    else:
+                        for line in part.split('\n'):
+                            cleaned = clean_line(line)
+                            if cleaned:
+                                yield sse_event(cleaned, current_section or "output")
 
             yield sse_event("[DONE]", "done")
 

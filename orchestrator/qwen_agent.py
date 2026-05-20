@@ -6,9 +6,10 @@ from orchestrator.agent import (
     MARKER_FINAL_END,
 )
 
+import os
 qwen_llm = ChatOllama(
-    model="qwen2.5:3b",
-    base_url="http://ollama:11434",
+    model="qwen2.5:0.5b",
+    base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434"),
     temperature=0.2,
     streaming=False
 )

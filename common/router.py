@@ -1,13 +1,15 @@
 from langchain_ollama import ChatOllama
 from common.safety import contains_profanity
-from common.greeting import is_greeting
+from common.greeting import get_greeting_response, is_greeting
 from orchestrator.planning.semantic_router import SemanticRouter
 import json
 import re
 
+import os
+
 router_llm = ChatOllama(
-    model="qwen2.5:3b",
-    base_url="http://ollama:11434",
+    model="qwen2.5:0.5b",
+    base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434"),
     temperature=0
 )
 
@@ -168,10 +170,26 @@ async def route_query(query: str) -> str:
     
     # Check greeting before LLM router (saves an LLM call to the router, but calls LLM for generation)
     if is_greeting(query):
-        # Generate dynamic greeting using Qwen
-        # print("ROUTE DECIDED: GREETING (Generating response)")
-        response_text = await generate_greeting_response(query)
-        return f"GREETING_RESPONSE:{response_text}"
+        # Keep simple greetings deterministic and independent of model availability.
+        return f"GREETING_RESPONSE:{get_greeting_response()}"
+
+    # Deterministic overrides for Agnikul Cosmos facts and ERP modules
+    query_lower = query.lower()
+    company_keywords = [
+        "agnikul", "cosmos", "agnibaan", "agnilet", "agnite", "sorted",
+        "founding", "founded", "chennai", "iit madras", "headquarter",
+        "srinath", "ravichandran", "moin", "satyanarayanan", "chakravarthy", "janardhana", "raju",
+        "cad", "dfr", "manufacturing", "instrumentation", "packaging", "quality integration",
+        "meshing", "scale verification", "dfr analysis", "mesh density", "element type",
+        "ansys", "solidworks", "fluent", "thermo-structural", "launch vehicle", "rocket", "engine",
+        "3d print", "3d-print"
+    ]
+    if any(kw in query_lower for kw in company_keywords):
+        erp_match = erp_semantic_router.match(query)
+        if erp_match:
+            route_name = erp_match["route"]["route_name"]
+            return f"ERP_ROUTE:{route_name}"
+        return "RAG"
 
     resp = await router_llm.ainvoke(
         ROUTER_PROMPT + "\nQuery: " + query

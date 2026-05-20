@@ -37,12 +37,22 @@ UPLOADS_DIR = Path("uploads")
 UPLOADS_DIR.mkdir(exist_ok=True)
 DEFAULT_TIMEOUT = 1000
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-TITLE_MODEL = "qwen2.5:3b"
+TITLE_MODEL = "qwen2.5:0.5b"
 
 
 class QueryRequest(BaseModel):
-    query: str
+    query: Optional[str] = None
+    question: Optional[str] = None
+    message: Optional[str] = None
+    content: Optional[str] = None
+    text: Optional[str] = None
     timeout: Optional[int] = DEFAULT_TIMEOUT
+
+    def normalized_query(self) -> str:
+        for value in (self.query, self.question, self.message, self.content, self.text):
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
 
 class TitleGenerationRequest(BaseModel):
     messages: list  # [{"role": "...", "content": "..."}]
@@ -88,7 +98,8 @@ def extract_final_text(agent_output: str) -> str:
 @app.post("/v1/query")
 async def query_endpoint(req: QueryRequest):
     """Non-streaming query endpoint."""
-    if not req.query or not isinstance(req.query, str):
+    question = req.normalized_query()
+    if not question:
         raise HTTPException(status_code=400, detail="`query` must be a non-empty string.")
 
     request_id = str(uuid.uuid4())
@@ -96,7 +107,7 @@ async def query_endpoint(req: QueryRequest):
     try:
         # Run agent with timeout
         result = await asyncio.wait_for(
-            run_agent(req.query),
+            run_agent(question),
             timeout=req.timeout or DEFAULT_TIMEOUT
         )
 
@@ -280,7 +291,16 @@ async def stream_query(request: Request):
     Captures stdout from agent and converts to SSE events.
     """
     body = await request.json()
-    question = body.get("query", "") or body.get("question", "") or ""
+    question = (
+        body.get("query")
+        or body.get("question")
+        or body.get("message")
+        or body.get("content")
+        or body.get("text")
+        or ""
+    )
+    if isinstance(question, str):
+        question = question.strip()
 
     if not question:
         raise HTTPException(status_code=400, detail="Query cannot be empty")
@@ -389,9 +409,29 @@ def tools_list():
 
 
 @app.get("/health")
-def health():
-    """Health check endpoint."""
-    return {"status": "ok", "version": "1.0"}
+async def health():
+    """Health check endpoint with Ollama model list."""
+    ollama_models = []
+    ollama_status = "unknown"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
+            if resp.status_code == 200:
+                ollama_status = "ok"
+                # Map models to a simpler list of names for readability
+                models_data = resp.json().get("models", [])
+                ollama_models = [m.get("name") for m in models_data]
+            else:
+                ollama_status = f"error: {resp.status_code}"
+    except Exception as e:
+        ollama_status = f"failed: {str(e)}"
+
+    return {
+        "status": "ok",
+        "version": "1.0",
+        "ollama_status": ollama_status,
+        "ollama_models": ollama_models
+    }
 
 
 @app.post("/v1/upload")

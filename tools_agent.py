@@ -10,7 +10,7 @@ from agent import (
 )
 
 tool_llm = ChatOllama(
-    model="qwen2.5:3b",
+    model="qwen2.5:0.5b",
     temperature=0
 ).bind_tools(TOOLS)
 
