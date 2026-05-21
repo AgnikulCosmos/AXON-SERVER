@@ -37,66 +37,67 @@
       "overall_food_counts"
     ]
   },
-{
-  "route_name": "food_menu",
-  "description": "check food menu, view food menu details, field includes menu",
-  "examples": [
-    "what is today's menu",
-    "show me the food menu",
-    "what's for lunch today",
-    "today's meal menu",
-    "show food menu"
-  ],
-  "doctype": "Food_Menu",
-  "frappe_method": "axon.api.get_food_menu",
-  "parameters": {},
-  "field_mapping": {
-    "menu": "menu"
+  {
+    "route_name": "food_menu",
+    "description": "check food menu, view food menu details, field includes menu",
+    "examples": [
+      "what is today's menu",
+      "show me the food menu",
+      "what's for lunch today",
+      "today's meal menu",
+      "show food menu"
+    ],
+    "doctype": "Food_Menu",
+    "frappe_method": "axon.api.get_food_menu",
+    "parameters": {},
+    "field_mapping": {
+      "menu": "menu"
+    },
+    "available_fields": [
+      "menu"
+    ]
   },
-  "available_fields": [
-    "menu"
-  ]
-} ,{
-  "route_name": "food_settings",
-  "description": "check food settings, view food settings details, fields include maximum booking days, booking slots, restrict for, meals allowed, consumption slots, sms settings, blocked users",
-  "examples": [
-    "show food settings",
-    "what are the meal booking settings",
-    "how many days can I book in advance",
-    "food consumption settings",
-    "meal booking configuration"
-  ],
-  "doctype": "Food_Settings",
-  "frappe_method": "axon.api.get_food_settings",
-  "parameters": {
-    "maximum_booking_days": "number",
-    "booking_slots": "string",
-    "restrict_for": "string",
-    "days_allowed": "number",
-    "consumption_slots": "string",
-    "blocked_users": "string"
+  {
+    "route_name": "food_settings",
+    "description": "check food settings, view food settings details, fields include maximum booking days, booking slots, restrict for, meals allowed, consumption slots, sms settings, blocked users",
+    "examples": [
+      "show food settings",
+      "what are the meal booking settings",
+      "how many days can I book in advance",
+      "food consumption settings",
+      "meal booking configuration"
+    ],
+    "doctype": "Food_Settings",
+    "frappe_method": "axon.api.get_food_settings",
+    "parameters": {
+      "maximum_booking_days": "number",
+      "booking_slots": "string",
+      "restrict_for": "string",
+      "days_allowed": "number",
+      "consumption_slots": "string",
+      "blocked_users": "string"
+    },
+    "field_mapping": {
+      "maximum_booking_days": "maximum_booking_days",
+      "booking_slots": "booking_slots",
+      "restrict_for": "restrict_for",
+      "days_allowed": "days_allowed",
+      "consumption_slots": "consumption_slots",
+      "blocked_users": "blocked_users"
+    },
+    "available_fields": [
+      "maximum_booking_days",
+      "booking_slots",
+      "restrict_for",
+      "days_allowed",
+      "consumption_slots",
+      "sms_settings",
+      "blocked_users",
+      "disable_on_insert",
+      "sync_old_app",
+      "email_list"
+    ]
   },
-  "field_mapping": {
-    "maximum_booking_days": "maximum_booking_days",
-    "booking_slots": "booking_slots",
-    "restrict_for": "restrict_for",
-    "days_allowed": "days_allowed",
-    "consumption_slots": "consumption_slots",
-    "blocked_users": "blocked_users"
-  },
-  "available_fields": [
-    "maximum_booking_days",
-    "booking_slots",
-    "restrict_for",
-    "days_allowed",
-    "consumption_slots",
-    "sms_settings",
-    "blocked_users",
-    "disable_on_insert",
-    "sync_old_app",
-    "email_list"
-  ]
-},
   {
     "route_name": "id_cards",
     "description": "check id cards, view id cards details, fields include employee id, employee name, employee email, date of joining, department name, crew name",
@@ -176,45 +177,6 @@
       "request_for",
       "project_name",
       "department_name"
-    ]
-  },
-  {
-    "route_name": "pr_leave_counts",
-    "description": "check pr leave counts, view pr leave counts details, fields include year, casual leave, sick leave, emergency/medical leave, disable, festival leave",
-    "examples": [
-      "how many leaves do I have",
-      "show my leave balance",
-      "leave count",
-      "check remaining leaves",
-      "what is my casual leave balance",
-      "how many sick leaves left"
-    ],
-    "doctype": "PR_Leave_Counts",
-    "frappe_method": "axon.api.get_pr_leave_counts",
-    "parameters": {
-      "year": "string",
-      "casual_leave": "number",
-      "sick_leave": "number",
-      "emergency_medical_leave": "number",
-      "disable": "boolean",
-      "festival_leave": "number"
-    },
-    "field_mapping": {
-      "year": "year",
-      "casual_leave": "casual_leave",
-      "sick_leave": "sick_leave",
-      "emergency_medical_leave": "emergency_medical_leave",
-      "disable": "disable",
-      "festival_leave": "festival_leave"
-    },
-    "available_fields": [
-      "name",
-      "year",
-      "casual_leave",
-      "sick_leave",
-      "emergency_medical_leave",
-      "disable",
-      "festival_leave"
     ]
   },
   {
@@ -513,6 +475,46 @@
       "start_time",
       "end_time",
       "notes"
+    ]
+  },
+  {
+    "route_name": "erp_tickets_create",
+    "description": "raise, create, or lodge a support ticket in ERP. Use this when the user wants to report an issue, bug, or complaint about an ERP application. It handles priority levels like P0, P1, P2, P3 and specific app names.",
+    "examples": [
+      "raise a ticket for erp issue",
+      "create a support ticket in erp",
+      "report an issue in erp support",
+      "lodge an erp support ticket",
+      "raise a P1 ticket for the Payroll app",
+      "create a ticket for the HR app",
+      "I want to report a bug in the Finance module"
+    ],
+    "doctype": "ERP_Tickets",
+    "frappe_method": "axon.api.create_erp_ticket",
+    "parameters": {
+      "app_name": "string",
+      "priority": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "description": "string",
+      "module": "string"
+    },
+    "field_mapping": {
+      "app_name": "app_name",
+      "priority": "priority",
+      "description": "description",
+      "module": "module"
+    },
+    "available_fields": [
+      "name",
+      "app_name",
+      "priority",
+      "status",
+      "description",
+      "raised_by"
     ]
   }
 ]

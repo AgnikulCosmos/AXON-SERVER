@@ -1,43 +1,36 @@
 from fastapi import FastAPI
-import wikipedia
-from wikipedia.exceptions import PageError, DisambiguationError
+import requests
 
 app = FastAPI()
 
+HEADERS = {
+    "User-Agent": "AXON-Wiki-Service/1.0"
+}
+
 @app.get("/query")
 def query(q: str):
+
     try:
-        page = wikipedia.page(
-            q,
-            auto_suggest=True,   
-        )
-        summary = wikipedia.summary(
-            page.title,
-            sentences=2,
-            auto_suggest=True,
-            redirect=True
+        search_url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + q.replace(" ", "_")
+
+        response = requests.get(
+            search_url,
+            headers=HEADERS,
+            timeout=20
         )
 
-        return {
-            "tool": "wiki",
-            "query": q,
-            "title": page.title,
-            "summary": summary
-        }
+        response.raise_for_status()
 
-    except DisambiguationError as e:
-        return {
-            "tool": "wiki",
-            "query": q,
-            "error": "Ambiguous query",
-            "options": e.options[:5]
-        }
+        data = response.json()
 
-    except PageError:
         return {
             "tool": "wiki",
             "query": q,
-            "error": "No Wikipedia page found"
+            "title": data.get("title"),
+            "summary": data.get("extract"),
+            "url": data.get("content_urls", {})
+                .get("desktop", {})
+                .get("page")
         }
 
     except Exception as e:

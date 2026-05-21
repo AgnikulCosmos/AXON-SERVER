@@ -1,5 +1,6 @@
 import requests
 import logging
+import re
 
 logging.basicConfig(level=logging.INFO)
 
@@ -48,8 +49,26 @@ def _infer_tool(query: str) -> str:
 
 
 def _clean_query(query: str, tool: str) -> str:
-    q = query.lower()
-    for word in ["use", "wiki", "wikipedia", "arxiv", "paper", "research", "ddgs", "ddg" , "search", ","]:
-        q = q.replace(word, " ")
-    return q.strip()
+    q = query.strip()
+
+    if tool == "wiki":
+        # Extract the actual search phrase from user intent like "Search wiki for quantum physics"
+        q = q.lower()
+        q = re.sub(r"\b(search|find|look up|lookup|show|tell me|what is|what are|who is|who are)\b", " ", q)
+        q = re.sub(r"\b(wiki|wikipedia)\b", " ", q)
+        q = re.sub(r"\b(for|about|on|page|summary)\b", " ", q)
+        q = re.sub(r"\s+", " ", q).strip()
+        return q or query
+
+    if tool == "arxiv":
+        q = q.lower()
+        q = re.sub(r"\b(search|find|look up|lookup|show|papers?|research|citation|doi|arxiv)\b", " ", q)
+        q = re.sub(r"\b(for|about|on|page|summary)\b", " ", q)
+        q = re.sub(r"\s+", " ", q).strip()
+        return q or query
+
+    # Default external search tool cleanup
+    q = re.sub(r"\b(use|search|find|look up|lookup|for|about|wiki|wikipedia|arxiv|paper|research|ddgs|ddg)\b", " ", q, flags=re.IGNORECASE)
+    q = re.sub(r"\s+", " ", q).strip()
+    return q or query
 

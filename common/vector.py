@@ -19,6 +19,9 @@ embeddings = OllamaEmbeddings(
 
 logger = logging.getLogger("orchestrator")
 
+_vector_store = None
+_retriever = None
+
 def build_db_from_scratch():
     logger.info(f"Building vector database from {DATASET_PATH}...")
     try:
@@ -65,27 +68,53 @@ def build_db_from_scratch():
                 )
             )
             
-    store = Chroma(
-        persist_directory=DB_PATH,
-        embedding_function=embeddings,
-        collection_name=COLLECTION_NAME
-    )
-    if documents:
-        store.add_documents(documents)
-    logger.info("Vector database successfully rebuilt.")
-    return store
+    try:
+        store = Chroma(
+            persist_directory=DB_PATH,
+            embedding_function=embeddings,
+            collection_name=COLLECTION_NAME
+        )
+        if documents:
+            store.add_documents(documents)
+        logger.info("Vector database successfully rebuilt.")
+        return store
+    except Exception as err:
+        logger.error(f"Failed to build vector database: {err}")
+        return None
 
-# Load or self-heal
-try:
-    vector_store = Chroma(
-        persist_directory=DB_PATH,
-        embedding_function=embeddings,
-        collection_name=COLLECTION_NAME
-    )
-    # Force loading of HNSW segments by performing a dummy similarity search
-    _ = vector_store.similarity_search("test", k=1)
-except Exception as e:
-    logger.error(f"Chroma DB is corrupted or incompatible ({e}). Self-healing...")
-    vector_store = build_db_from_scratch()
 
-retriever = vector_store.as_retriever(search_kwargs={"k": 5})
+def _load_vector_store():
+    global _vector_store
+    if _vector_store is not None:
+        return _vector_store
+
+    try:
+        store = Chroma(
+            persist_directory=DB_PATH,
+            embedding_function=embeddings,
+            collection_name=COLLECTION_NAME
+        )
+        _ = store.similarity_search("test", k=1)
+        _vector_store = store
+        return _vector_store
+    except Exception as err:
+        logger.error(f"Chroma DB load failed ({err}). Attempting to rebuild...")
+        _vector_store = build_db_from_scratch()
+        return _vector_store
+
+
+def get_vector_retriever():
+    global _retriever
+    if _retriever is not None:
+        return _retriever
+
+    store = _load_vector_store()
+    if store is None:
+        return None
+
+    try:
+        _retriever = store.as_retriever(search_kwargs={"k": 5})
+        return _retriever
+    except Exception as err:
+        logger.error(f"Failed to create vector retriever: {err}")
+        return None

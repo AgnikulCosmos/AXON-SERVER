@@ -2,15 +2,13 @@ from langchain_ollama import ChatOllama
 from common.safety import contains_profanity
 from common.greeting import get_greeting_response, is_greeting
 from orchestrator.planning.semantic_router import SemanticRouter
-import json
-import re
-
 import os
 
 router_llm = ChatOllama(
-    model="qwen2.5:0.5b",
+    model="qwen2.5:3b",
     base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434"),
-    temperature=0
+    temperature=0,
+    format="json"
 )
 
 erp_semantic_router = SemanticRouter()
@@ -173,54 +171,57 @@ async def route_query(query: str) -> str:
         # Keep simple greetings deterministic and independent of model availability.
         return f"GREETING_RESPONSE:{get_greeting_response()}"
 
-    # Deterministic overrides for Agnikul Cosmos facts and ERP modules
     query_lower = query.lower()
+
+    # Explicit tool-driven requests
+    wiki_keywords = ["wiki", "wikipedia"]
+    arxiv_keywords = ["arxiv", "paper", "research", "citation", "doi", "journal", "conference", "preprint"]
     company_keywords = [
         "agnikul", "cosmos", "agnibaan", "agnilet", "agnite", "sorted",
         "founding", "founded", "chennai", "iit madras", "headquarter",
         "srinath", "ravichandran", "moin", "satyanarayanan", "chakravarthy", "janardhana", "raju",
+    ]
+    erp_keywords = [
         "cad", "dfr", "manufacturing", "instrumentation", "packaging", "quality integration",
         "meshing", "scale verification", "dfr analysis", "mesh density", "element type",
         "ansys", "solidworks", "fluent", "thermo-structural", "launch vehicle", "rocket", "engine",
-        "3d print", "3d-print"
+        "3d print", "3d-print",
+        "po ", "purchase order", "vendor", "leave", "appraisal", "payment request", "sourcing",
+        "dashboard", "approval", "expense", "budget", "invoice"
     ]
+
+    # Agnikul-related queries should return knowledge-base answers from chromaDB.
     if any(kw in query_lower for kw in company_keywords):
+        return "RAG"
+
+    # Explicit external search requests.
+    if any(kw in query_lower for kw in wiki_keywords):
+        return "TOOLS"
+    if any(kw in query_lower for kw in arxiv_keywords):
+        return "TOOLS"
+
+    # Leave policy / leave type questions are internal knowledge lookups,
+    # not ERP workflow ticket creation.
+    leave_info_triggers = [
+        "leave types",
+        "types of leave",
+        "leave policy",
+        "available leave",
+        "leave available",
+        "what leaves",
+        "available leaves",
+        "type of leave",
+    ]
+    if any(phrase in query_lower for phrase in leave_info_triggers):
+        return "RAG"
+
+    # Query looks like an ERP/internal workflow request.
+    if any(kw in query_lower for kw in erp_keywords):
         erp_match = erp_semantic_router.match(query)
         if erp_match:
             route_name = erp_match["route"]["route_name"]
             return f"ERP_ROUTE:{route_name}"
         return "RAG"
 
-    resp = await router_llm.ainvoke(
-        ROUTER_PROMPT + "\nQuery: " + query
-    )
-
-    try:
-        match = re.search(r"\{.*\}", resp.content, re.S)
-        if not match:
-            # print("ROUTE DECIDED: TOOLS (no JSON)")
-            return "TOOLS"
-
-        data = json.loads(match.group())
-        intent = data.get("intent", "GENERAL")
-
-        route = INTENT_TO_ROUTE.get(intent, "TOOLS")
-
-        # -------------------------
-        # ERP → Semantic Route Match
-        # -------------------------
-        if route == "ERP":  # ERP or COMPANY both map to RAG
-            erp_match = erp_semantic_router.match(query)
-
-            if erp_match:
-                route_name = erp_match["route"]["route_name"]
-                return f"ERP_ROUTE:{route_name}"
-
-            # If no semantic match, fallback to normal RAG
-            return "RAG"
-
-        return route
-
-    except Exception:
-        # print("ROUTE DECIDED: TOOLS (exception)")
-        return "TOOLS"
+    # All other queries should use external search tools via ddgs.
+    return "TOOLS"

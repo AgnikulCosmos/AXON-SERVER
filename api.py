@@ -261,7 +261,6 @@ Output Rules:
             data = resp.json()
 
         raw_title = (data.get("message", {}).get("content", "") or "").strip()
-        print("RAW TITLE OUTPUT:", raw_title)
 
         title = raw_title.strip().strip("\"'").strip()
 

@@ -79,7 +79,7 @@ from typing import Optional
 
 DEFAULT_TIMEOUT = 1000
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-TITLE_MODEL = "qwen2.5:0.5b"
+TITLE_MODEL = "qwen2.5:3b"
 
 class QueryRequest(BaseModel):
     query: Optional[str] = None
@@ -241,7 +241,6 @@ Output Rules:
             data = resp.json()
 
         raw_title = (data.get("message", {}).get("content", "") or "").strip()
-        print("RAW TITLE OUTPUT:", raw_title)
 
         title = raw_title.strip().strip("\"'").strip()
 

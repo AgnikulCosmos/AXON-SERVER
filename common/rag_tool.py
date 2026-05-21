@@ -1,6 +1,6 @@
 
 # rag_tool.py
-# Pure dataset.json keyword search — no Chroma / no embedding dependency.
+# Agnikul knowledge retrieval using Chroma vector search with dataset.json fallback.
 
 from langchain_core.tools import Tool
 from langchain_ollama import ChatOllama
@@ -16,21 +16,14 @@ logger = logging.getLogger("orchestrator")
 # LLM for factual summarization
 # -----------------------------
 _summarizer_llm = ChatOllama(
-    model="qwen2.5:0.5b",
+    model="qwen2.5:3b",
     temperature=0,
     base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 )
 
 _summary_template = """
-You are a factual assistant.
-
-Answer the user's question using ONLY the information provided below.
-If the information is missing, respond with:
-"Information not available in the knowledge base."
-
-Do NOT mention sources.
-Do NOT say "not in context".
-Do NOT add explanations outside the answer.
+Based on the following knowledge base context, answer the user's question directly. 
+If the answer is not in the context, say "I don't have enough information to answer that."
 
 Context:
 {context}
@@ -121,6 +114,24 @@ def keyword_search(query: str, k: int = 5) -> list:
     return [text for _, text in scored[:k]]
 
 
+def vector_search(query: str, k: int = 5) -> list:
+    """Vector similarity search using the Chroma DB retriever."""
+    try:
+        from common.vector import get_vector_retriever
+
+        retriever = get_vector_retriever()
+        if retriever is None:
+            raise RuntimeError("Vector retriever unavailable")
+
+        docs = retriever.get_relevant_documents(query)
+        results = [getattr(doc, "page_content", "") for doc in docs if getattr(doc, "page_content", "")]
+        if results:
+            return results[:k]
+    except Exception as err:
+        logger.warning(f"Vector search failed: {err}")
+    return keyword_search(query, k=k)
+
+
 # -----------------------------
 # RAG entry point
 # -----------------------------
@@ -128,7 +139,7 @@ def rag_search(query: str) -> str:
     if not isinstance(query, str) or not query.strip():
         return "Invalid query."
 
-    context_parts = keyword_search(query, k=5)
+    context_parts = vector_search(query, k=5)
 
     if not context_parts:
         return "Information not available in the knowledge base."
