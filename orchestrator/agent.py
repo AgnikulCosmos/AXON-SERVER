@@ -5,7 +5,7 @@ import os
 
 
 from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 # from tools.registry import TOOLS
 
@@ -61,7 +61,7 @@ async def stream_text_word_by_word(text: str, *, end: str = "\n") -> None:
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 
 llm = ChatOllama(
-    model="axon-5.6:latest",
+    model="qwen2.5:0.5b",
     base_url=OLLAMA_BASE_URL,
     temperature=0.3,
     top_p=0.9,
@@ -100,7 +100,10 @@ async def run_axon(question: str, max_iterations: int = 5) -> str:
 
     """
 
-    messages = [HumanMessage(content=question)]
+    messages = [
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(content=question)
+    ]
     
     for iteration in range(max_iterations):
         try:

@@ -37,7 +37,7 @@ async def startup_event():
     logger = logging.getLogger("orchestrator")
     logger.info("FastAPI startup: Bootstrapping Ollama models...")
     
-    models_to_pull = ["mxbai-embed-large", "qwen2.5:0.5b", "axon-5.6:latest"]
+    models_to_pull = ["mxbai-embed-large", "qwen2.5:0.5b"]
     for model in models_to_pull:
         try:
             logger.info(f"Ensuring Ollama model '{model}' is pulled...")
@@ -79,7 +79,7 @@ from typing import Optional
 
 DEFAULT_TIMEOUT = 1000
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-TITLE_MODEL = "qwen2.5:3b"
+TITLE_MODEL = "qwen2.5:0.5b"
 
 class QueryRequest(BaseModel):
     query: Optional[str] = None
@@ -102,17 +102,25 @@ class TitleGenerationRequest(BaseModel):
     timeout: Optional[int] = DEFAULT_TIMEOUT
 
 
+def frappe_headers_from_request(request: Request) -> dict:
+    forwarded = {}
+    for name in ("authorization", "cookie", "x-frappe-csrf-token"):
+        value = request.headers.get(name)
+        if value:
+            forwarded[name] = value
+    return forwarded
+
 
 
 # ---------------- NORMAL QUERY ----------------
 
 @app.post("/v1/query")
-async def query_api(req: QueryRequest):
+async def query_api(req: QueryRequest, request: Request):
     question = req.normalized_query()
     if not question:
         raise HTTPException(status_code=400, detail="`query` must be a non-empty string.")
 
-    result = await run_agent(question)
+    result = await run_agent(question, frappe_headers_from_request(request))
     return {"response": result}
 
 
@@ -308,7 +316,7 @@ async def stream_query(request: Request):
         current_section = None
 
         try:
-            task = asyncio.create_task(run_agent(question))
+            task = asyncio.create_task(run_agent(question, frappe_headers_from_request(request)))
 
             # Compile regex for markers
             markers = [

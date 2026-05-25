@@ -5,7 +5,7 @@ from orchestrator.planning.semantic_router import SemanticRouter
 import os
 
 router_llm = ChatOllama(
-    model="qwen2.5:3b",
+    model="qwen2.5:0.5b",
     base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434"),
     temperature=0,
     format="json"
@@ -187,7 +187,9 @@ async def route_query(query: str) -> str:
         "ansys", "solidworks", "fluent", "thermo-structural", "launch vehicle", "rocket", "engine",
         "3d print", "3d-print",
         "po ", "purchase order", "vendor", "leave", "appraisal", "payment request", "sourcing",
-        "dashboard", "approval", "expense", "budget", "invoice"
+        "dashboard", "approval", "expense", "budget", "invoice",
+        "ticket", "support ticket", "raise support", "erp support", "support record",
+        "feedback", "suggestion", "review", "erp_i_", "view details"
     ]
 
     # Agnikul-related queries should return knowledge-base answers from chromaDB.

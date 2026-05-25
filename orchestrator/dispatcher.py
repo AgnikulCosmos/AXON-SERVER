@@ -8,11 +8,19 @@ from orchestrator.agent import run_axon
 from orchestrator.qwen_agent import run_qwen, summarize_tool_output
 from orchestrator.tool_dispatcher import dispatch_tool
 from orchestrator.erp_tool_dispatcher import prepare_tool_call
+from orchestrator.erp_support_client import (
+    execute_erp_support_plan,
+    format_erp_support_response,
+)
 from orchestrator.planning import router_pipeline
 from orchestrator.agent import (
     MARKER_FINAL_START,
     MARKER_FINAL_END,
     stream_text_word_by_word,
+)
+from orchestrator.frappe_client import (
+    reset_frappe_request_headers,
+    set_frappe_request_headers,
 )
 
 PROFANITY_FALLBACK = (
@@ -22,7 +30,15 @@ PROFANITY_FALLBACK = (
 TEST_MODE = False
 
 
-async def run_agent(query: str):
+async def run_agent(query: str, frappe_headers: dict | None = None):
+    header_token = set_frappe_request_headers(frappe_headers)
+    try:
+        return await _run_agent(query)
+    finally:
+        reset_frappe_request_headers(header_token)
+
+
+async def _run_agent(query: str):
     # print("ROUTE QUERY RECEIVED:", query)
     # route = await route_query(query)
     # print("ROUTE DECIDED:", route)
@@ -89,17 +105,14 @@ async def run_agent(query: str):
         plan = router_pipeline.process(query)
 
         if plan:
-            import requests
-            
-            # Use the lapped method name and filters to make a call
-            # Normally this would go through a Frappe API wrapper.
-            # For now, we implement the logic to actually call the backend.
-            
             method = plan["method"]
             filters = plan.get("filters") or {}
             
             try:
-                if method.startswith("get_") or "list" in method or "query" in method:
+                if method.startswith("erp_support."):
+                    tool_response = execute_erp_support_plan(plan)
+                    result = format_erp_support_response(plan, tool_response)
+                elif method.startswith("get_") or "list" in method or "query" in method:
                     result = f"Fetching information for {method} with filters {filters}..."
                 else:
                     import random
@@ -107,6 +120,8 @@ async def run_agent(query: str):
                     req_id = f"ERP_I_{random.randint(1000, 9999)}"
                     # Simulate successful creation in ERP
                     result = f"Successfully created your request and your req_id is {req_id}"
+            except ValueError as e:
+                result = str(e)
             except Exception as e:
                 result = f"Error executing ERP method {method}: {str(e)}"
         else:

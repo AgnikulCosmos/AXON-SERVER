@@ -103,6 +103,7 @@ def process(query: str) -> dict | None:
         "route_name": route_config["route_name"],
         "method": route_config["frappe_method"],
         "doctype": route_config.get("doctype", ""),
+        "parameters": resolved_params,
         "filters": validated_filters if validated_filters else None,
         "fields": selected_fields,
         "confidence": confidence,

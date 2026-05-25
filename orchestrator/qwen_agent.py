@@ -46,18 +46,13 @@ async def summarize_tool_output(
     tool_data: dict
 ) -> str:
     prompt = f"""
-The user asked:
-{user_query}
+You are Axon, a helpful chatbot. Answer the user's question directly and naturally using the retrieved data.
+Do not mention any tools, APIs, or database names in your response.
 
-The following information was retrieved using the tool "{tool_name}":
+User Question: {user_query}
+Retrieved Data: {tool_data}
 
-{tool_data}
-
-Your task:
-- Summarize this information clearly for the user
-- Be concise and professional
-- Do NOT mention tools, APIs, JSON, or internal processing
-- If results are empty, say that no relevant information was found
+Response:
 """
 
     messages = [

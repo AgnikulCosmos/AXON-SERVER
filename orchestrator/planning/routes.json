@@ -479,7 +479,7 @@
   },
   {
     "route_name": "erp_tickets_create",
-    "description": "raise, create, or lodge a support ticket in ERP. Use this when the user wants to report an issue, bug, or complaint about an ERP application. It handles priority levels like P0, P1, P2, P3 and specific app names.",
+    "description": "Raise, create, or lodge an ERP Support ticket. Use this when the user wants to report an issue, bug, failure, or complaint about an ERP application or module. It handles priority levels like P0, P1, P2, P3, application names, module names, issue dates, roles, descriptions, and attachments.",
     "examples": [
       "raise a ticket for erp issue",
       "create a support ticket in erp",
@@ -487,10 +487,12 @@
       "lodge an erp support ticket",
       "raise a P1 ticket for the Payroll app",
       "create a ticket for the HR app",
-      "I want to report a bug in the Finance module"
+      "I want to report a bug in the Finance module",
+      "raise a P0 ticket for dashboard in uhjkm app with description D",
+      "create an ERP ticket for app uhjkm module Dashboard priority P0"
     ],
     "doctype": "ERP_Tickets",
-    "frappe_method": "axon.api.create_erp_ticket",
+    "frappe_method": "erp_support.put_api.create",
     "parameters": {
       "app_name": "string",
       "priority": [
@@ -499,22 +501,261 @@
         "P2",
         "P3"
       ],
+      "status": [
+        "Yet To Start",
+        "In Progress",
+        "To Test",
+        "Testing Completed",
+        "Resolved",
+        "Cancelled"
+      ],
+      "issue_dt": "date",
       "description": "string",
-      "module": "string"
+      "module": "string",
+      "attachments": "string",
+      "roles": "string"
     },
     "field_mapping": {
       "app_name": "app_name",
       "priority": "priority",
+      "status": "status",
+      "issue_dt": "issue_dt",
       "description": "description",
-      "module": "module"
+      "module": "module",
+      "attachments": "attachments",
+      "roles": "roles"
     },
     "available_fields": [
       "name",
       "app_name",
       "priority",
       "status",
+      "issue_dt",
       "description",
+      "module",
+      "attachments",
+      "roles",
       "raised_by"
+    ]
+  },
+  {
+    "route_name": "erp_feedback_create",
+    "description": "Create ERP Support feedback or review for an ERP application. Use this when the user wants to submit feedback, give a review, or rate an ERP app.",
+    "examples": [
+      "give feedback for uhjkm app saying S with rating 4",
+      "submit a review for Payroll app rating 5",
+      "create ERP support feedback for app uhjkm feedback S ratings 4",
+      "I want to give feedback for the dashboard app"
+    ],
+    "doctype": "ERP_Feedback_Suggestions",
+    "frappe_method": "erp_support.put_api.create",
+    "parameters": {
+      "app_name": "string",
+      "feedback": "string",
+      "ratings": "number",
+      "attachments": "string"
+    },
+    "field_mapping": {
+      "app_name": "app_name",
+      "feedback": "feedback",
+      "ratings": "ratings",
+      "attachments": "attachments"
+    },
+    "available_fields": [
+      "name",
+      "app_name",
+      "type",
+      "feedback",
+      "ratings",
+      "attachments",
+      "raised_by"
+    ]
+  },
+  {
+    "route_name": "erp_suggestion_create",
+    "description": "Create ERP Support suggestion for an ERP application. Use this when the user wants to suggest an improvement, feature, change, or enhancement for an ERP app.",
+    "examples": [
+      "give a suggestion for uhjkm app priority Medium feedback d helps d",
+      "submit an ERP suggestion for HR app",
+      "suggest an improvement for Dashboard with medium priority",
+      "create suggestion for app uhjkm with feedback d and helps d"
+    ],
+    "doctype": "ERP_Feedback_Suggestions",
+    "frappe_method": "erp_support.put_api.create",
+    "parameters": {
+      "app_name": "string",
+      "priority": [
+        "Low",
+        "Medium",
+        "High"
+      ],
+      "feedback": "string",
+      "helps": "string",
+      "attachments": "string"
+    },
+    "field_mapping": {
+      "app_name": "app_name",
+      "priority": "priority",
+      "feedback": "feedback",
+      "helps": "helps",
+      "attachments": "attachments"
+    },
+    "available_fields": [
+      "name",
+      "app_name",
+      "type",
+      "priority",
+      "feedback",
+      "helps",
+      "attachments",
+      "raised_by",
+      "status"
+    ]
+  },
+  {
+    "route_name": "erp_tickets_list",
+    "description": "List, show, or view ERP Support tickets visible to the logged-in user. Employees should only see tickets raised by themselves, as enforced by the ERP Support API session user.",
+    "examples": [
+      "show my ERP tickets",
+      "list my support tickets",
+      "view tickets I raised",
+      "show my ERP support requests",
+      "what is the status of my support tickets",
+      "show my ticket history"
+    ],
+    "doctype": "ERP_Tickets",
+    "frappe_method": "erp_support.get_api.get_tickets",
+    "parameters": {
+      "from_date": "date",
+      "to_date": "date",
+      "start": "number",
+      "limit": "number",
+      "query": "string"
+    },
+    "field_mapping": {
+      "from_date": "from_date",
+      "to_date": "to_date",
+      "start": "start",
+      "limit": "limit",
+      "query": "query"
+    },
+    "available_fields": [
+      "name",
+      "app_name",
+      "priority",
+      "issue_dt",
+      "description",
+      "status",
+      "raised_by",
+      "creation"
+    ]
+  },
+  {
+    "route_name": "erp_feedback_list",
+    "description": "List, show, or view ERP Support feedback and reviews visible to the logged-in user.",
+    "examples": [
+      "show ERP feedback",
+      "list feedback reviews",
+      "show my ERP reviews",
+      "view feedback for ERP apps",
+      "show support feedback"
+    ],
+    "doctype": "ERP_Feedback_Suggestions",
+    "frappe_method": "erp_support.get_api.get_fb_sg",
+    "parameters": {
+      "from_date": "date",
+      "to_date": "date",
+      "start": "number",
+      "limit": "number",
+      "query": "string"
+    },
+    "field_mapping": {
+      "from_date": "from_date",
+      "to_date": "to_date",
+      "start": "start",
+      "limit": "limit",
+      "query": "query"
+    },
+    "available_fields": [
+      "name",
+      "app_name",
+      "type",
+      "raised_by",
+      "creation",
+      "feedback",
+      "ratings"
+    ]
+  },
+  {
+    "route_name": "erp_suggestions_list",
+    "description": "List, show, or view ERP Support suggestions visible to the logged-in user. Employees should only see suggestions raised by themselves, as enforced by the ERP Support API session user.",
+    "examples": [
+      "show my ERP suggestions",
+      "list suggestions I raised",
+      "view my support suggestions",
+      "show ERP suggestion status",
+      "show my suggestion history"
+    ],
+    "doctype": "ERP_Feedback_Suggestions",
+    "frappe_method": "erp_support.get_api.get_fb_sg",
+    "parameters": {
+      "from_date": "date",
+      "to_date": "date",
+      "start": "number",
+      "limit": "number",
+      "query": "string"
+    },
+    "field_mapping": {
+      "from_date": "from_date",
+      "to_date": "to_date",
+      "start": "start",
+      "limit": "limit",
+      "query": "query"
+    },
+    "available_fields": [
+      "name",
+      "app_name",
+      "type",
+      "raised_by",
+      "creation",
+      "feedback",
+      "priority",
+      "status"
+    ]
+  },
+  {
+    "route_name": "erp_support_view_details",
+    "description": "View details for an ERP Support application, ticket, feedback, review, suggestion, user manual, FAQ, update, or record by document name or ID.",
+    "examples": [
+      "show details for ERP_I_1234",
+      "view ERP support ticket ERP_I_1234",
+      "get details for feedback FBSG-0001",
+      "show suggestion details for SUG-0002",
+      "open ERP support record ERP_I_4321"
+    ],
+    "doctype": "",
+    "frappe_method": "erp_support.get_api.view_details",
+    "parameters": {
+      "docname": "string"
+    },
+    "field_mapping": {
+      "docname": "docname"
+    },
+    "available_fields": [
+      "name",
+      "app_name",
+      "type",
+      "priority",
+      "status",
+      "module",
+      "issue_date",
+      "raised_by",
+      "raised_on",
+      "description",
+      "feedback",
+      "helps",
+      "ratings",
+      "attachments"
     ]
   }
 ]

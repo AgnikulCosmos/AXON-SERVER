@@ -41,10 +41,10 @@ async def dispatch_tool(query: str):
 
 def _infer_tool(query: str) -> str:
     q = query.lower()
-    if "arxiv" in q or "paper" in q or "research" in q:
-        return "arxiv"
     if "wiki" in q or "wikipedia" in q:
         return "wiki"
+    if "arxiv" in q or "paper" in q or "research" in q:
+        return "arxiv"
     return "ddgs"
 
 
@@ -58,7 +58,7 @@ def _clean_query(query: str, tool: str) -> str:
         q = re.sub(r"\b(wiki|wikipedia)\b", " ", q)
         q = re.sub(r"\b(for|about|on|page|summary)\b", " ", q)
         q = re.sub(r"\s+", " ", q).strip()
-        return q or query
+        return q.title() or query
 
     if tool == "arxiv":
         q = q.lower()

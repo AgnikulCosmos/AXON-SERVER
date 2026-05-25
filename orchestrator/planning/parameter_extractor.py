@@ -80,20 +80,26 @@ def extract_parameters(query: str, route_config: dict) -> dict:
     if not params_schema:
         return {}
 
+    extracted_params: dict = {}
+
     # ── 1. LLM extraction ───────────────────────────────────────────────
     try:
         extracted = _llm_extract(query, params_schema)
         if extracted:
-            normalised = _normalise(extracted, params_schema)
-            logger.debug("LLM extraction result: %s", normalised)
-            return normalised
+            extracted_params = _normalise(extracted, params_schema)
+            logger.debug("LLM extraction result: %s", extracted_params)
     except Exception as exc:
         logger.warning("LLM parameter extraction failed: %s — using fallback", exc)
 
     # ── 2. Deterministic fallback ────────────────────────────────────────
     fallback = _keyword_extract(query, params_schema)
-    logger.debug("Fallback extraction result: %s", fallback)
-    return fallback
+    fallback.update(_erp_support_extract(query, route_config, params_schema))
+
+    for key, value in fallback.items():
+        extracted_params.setdefault(key, value)
+
+    logger.debug("Merged extraction result: %s", extracted_params)
+    return extracted_params
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -145,7 +151,7 @@ def _keyword_extract(query: str, schema: dict) -> dict:
         if isinstance(ptype, list):
             for option in ptype:
                 if option.lower() in q_lower:
-                    extracted[param] = option.lower()
+                    extracted[param] = option
                     break
         # ── Date ─────────────────────────────────────────────────────────
         elif ptype == "date":
@@ -174,6 +180,72 @@ def _keyword_extract(query: str, schema: dict) -> dict:
     return extracted
 
 
+def _erp_support_extract(query: str, route_config: dict, schema: dict) -> dict:
+    route_name = route_config.get("route_name", "")
+    if not route_name.startswith("erp_"):
+        return {}
+
+    extracted: dict = {}
+
+    if "priority" in schema:
+        priority_options = schema["priority"]
+        if isinstance(priority_options, list):
+            for option in priority_options:
+                if re.search(rf"\b{re.escape(option)}\b", query, re.I):
+                    extracted["priority"] = option
+                    break
+
+    if "ratings" in schema:
+        rating = re.search(r"\bratings?\s*[:=]?\s*([1-5](?:\.\d+)?)\b", query, re.I)
+        if rating:
+            extracted["ratings"] = float(rating.group(1))
+
+    string_patterns = {
+        "app_name": [
+            r"\bapp(?:lication)?\s*[:=]?\s*([A-Za-z0-9_& .-]+?)(?=,|\s+module\b|\s+priority\b|\s+with\b|\s+feedback\b|\s+description\b|$)",
+            r"\bfor\s+app(?:lication)?\s+([A-Za-z0-9_& .-]+?)(?=,|\s+module\b|\s+priority\b|\s+with\b|\s+feedback\b|\s+description\b|$)",
+        ],
+        "module": [
+            r"\bmodule\s*[:=]?\s*([A-Za-z0-9_& .-]+?)(?=,|\s+priority\b|\s+description\b|\s+issue\b|$)",
+        ],
+        "description": [
+            r"\bdescription\s*[:=]\s*(.+)$",
+            r"\bissue\s*[:=]\s*(.+)$",
+        ],
+        "feedback": [
+            r"\bfeedback\s*[:=]\s*(.+?)(?=\s+\bhelps\b|\s+\bratings?\b|$)",
+            r"\bsaying\s+(.+?)(?=\s+\bhelps\b|\s+\bratings?\b|$)",
+        ],
+        "helps": [
+            r"\bhelps\s*[:=]\s*(.+)$",
+            r"\bhelps\s+(.+)$",
+        ],
+        "attachments": [
+            r"\battachments?\s*[:=]\s*(.+)$",
+        ],
+        "roles": [
+            r"\broles\s*[:=]\s*(.+?)(?=,?\s+\bdescription\b|$)",
+        ],
+    }
+
+    for field, patterns in string_patterns.items():
+        if field not in schema or field in extracted:
+            continue
+        for pattern in patterns:
+            match = re.search(pattern, query, re.I)
+            if match:
+                value = _clean_extracted_text(match.group(1))
+                if value:
+                    extracted[field] = value
+                    break
+
+    return extracted
+
+
+def _clean_extracted_text(value: str) -> str:
+    return value.strip().strip(",.; ")
+
+
 def _normalise(extracted: dict, schema: dict) -> dict:
     """
     Validate extracted values against the schema and normalise to lowercase.
@@ -188,8 +260,10 @@ def _normalise(extracted: dict, schema: dict) -> dict:
         if isinstance(ptype, list):
             # Must be one of the enum options
             val_lower = str(value).lower()
-            if val_lower in [o.lower() for o in ptype]:
-                cleaned[key] = val_lower
+            for option in ptype:
+                if val_lower == option.lower():
+                    cleaned[key] = option
+                    break
         elif ptype == "boolean":
             cleaned[key] = bool(value)
         elif ptype == "number":
@@ -198,8 +272,8 @@ def _normalise(extracted: dict, schema: dict) -> dict:
             except (ValueError, TypeError):
                 pass
         else:
-            # string / date / datetime — keep as-is, lowercased
-            cleaned[key] = str(value).strip().lower() if value else None
+            # string / date / datetime — keep user-provided casing for DocType values.
+            cleaned[key] = str(value).strip() if value else None
             if cleaned[key] is None:
                 del cleaned[key]
 

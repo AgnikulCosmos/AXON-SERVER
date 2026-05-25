@@ -78,6 +78,15 @@ def sse_event(data: str, event_type: Optional[str] = None) -> str:
     else:
         return f"data: {safe}\n\n"
 
+
+def frappe_headers_from_request(request: Request) -> dict:
+    forwarded = {}
+    for name in ("authorization", "cookie", "x-frappe-csrf-token"):
+        value = request.headers.get(name)
+        if value:
+            forwarded[name] = value
+    return forwarded
+
 def extract_final_text(agent_output: str) -> str:
     """
     Extract only final answer content from agent output.
@@ -96,7 +105,7 @@ def extract_final_text(agent_output: str) -> str:
     return agent_output.strip()
 
 @app.post("/v1/query")
-async def query_endpoint(req: QueryRequest):
+async def query_endpoint(req: QueryRequest, request: Request):
     """Non-streaming query endpoint."""
     question = req.normalized_query()
     if not question:
@@ -107,7 +116,7 @@ async def query_endpoint(req: QueryRequest):
     try:
         # Run agent with timeout
         result = await asyncio.wait_for(
-            run_agent(question),
+            run_agent(question, frappe_headers_from_request(request)),
             timeout=req.timeout or DEFAULT_TIMEOUT
         )
 
@@ -315,7 +324,7 @@ async def stream_query(request: Request):
 
         try:
             # Start agent as a background task so we can poll its stdout
-            task = asyncio.create_task(run_agent(question))
+            task = asyncio.create_task(run_agent(question, frappe_headers_from_request(request)))
 
             # While the agent is running, repeatedly check for new output and yield it
             while not task.done():
@@ -400,10 +409,20 @@ async def stream_query(request: Request):
 def tools_list():
     """List available tools."""
     from orchestrator.tool_dispatcher import TOOL_ENDPOINTS
+    from orchestrator.mcp_registry import MCP_REGISTRY
     tools = [
         {"name": name, "description": f"Endpoint: {url}"}
         for name, url in TOOL_ENDPOINTS.items()
     ]
+    tools.extend(
+        {
+            "name": tool.name,
+            "description": tool.description,
+            "method": tool.method,
+            "http_method": tool.http_method,
+        }
+        for tool in MCP_REGISTRY.values()
+    )
     return {"tools": tools}
 
 
