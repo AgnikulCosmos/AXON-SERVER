@@ -100,35 +100,35 @@ def _is_erp_ticket_creation_query(query: str) -> bool:
     """Detect if the query is for creating an ERP support ticket."""
     q_lower = query.lower()
     
-    # Ticket creation keywords
-    ticket_keywords = [
-        "raise a", "create a", "lodge a", "submit a", 
-        "report a", "open a", "file a",
-        "ticket", "support ticket", "erp ticket",
-        "raise support", "create support",
-        "raise ticket", "create ticket"
-    ]
+    # Must contain some support ticket reference
+    has_ticket_ref = any(x in q_lower for x in ["ticket", "support", "issue", "error", "bug", "problem", "assistance", "incident", "request erp"])
     
-    # Check if any ticket creation phrase is present
-    for keyword in ticket_keywords:
-        if keyword in q_lower:
-            return True
+    # Must contain some creation verb
+    creation_verbs = ["raise", "create", "lodge", "submit", "report", "open", "file", "post", "add"]
+    has_creation_verb = any(x in q_lower for x in creation_verbs)
     
-    return False
+    # Skip leaves / checkins / other unrelated administrative creations
+    is_unrelated_creation = any(kw in q_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday", "checkin", "check out", "checkout", "check-in", "payroll", "salary slip"])
+    
+    return has_creation_verb and has_ticket_ref and not is_unrelated_creation
 
 
 def _is_erp_feedback_creation_query(query: str) -> bool:
     """Detect if the query is for creating ERP feedback/review."""
     q_lower = query.lower()
     feedback_keywords = ["give feedback", "submit feedback", "review", "rate", "rating"]
-    return any(kw in q_lower for kw in feedback_keywords)
+    has_feedback_ref = any(kw in q_lower for kw in feedback_keywords)
+    is_unrelated = any(kw in q_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday", "checkin", "check-out", "checkout", "check-in", "payroll"])
+    return has_feedback_ref and not is_unrelated
 
 
 def _is_erp_suggestion_creation_query(query: str) -> bool:
     """Detect if the query is for creating ERP suggestion."""
     q_lower = query.lower()
     suggestion_keywords = ["suggestion", "improve", "enhancement", "feature request"]
-    return any(kw in q_lower for kw in suggestion_keywords)
+    has_suggestion_ref = any(kw in q_lower for kw in suggestion_keywords)
+    is_unrelated = any(kw in q_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday", "checkin", "check-out", "checkout", "check-in", "payroll"])
+    return has_suggestion_ref and not is_unrelated
 
 
 async def _run_agent(query: str, session_id: str | None = None):

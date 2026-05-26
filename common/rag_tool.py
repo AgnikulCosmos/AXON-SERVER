@@ -138,6 +138,14 @@ def rag_search(query: str) -> str:
     if not isinstance(query, str) or not query.strip():
         return "Invalid query."
 
+    # Detect if user asks to create/apply/correct unsupported administrative models (like leaves, checkins, checkouts, claim expenses, payroll corrections)
+    query_lower = query.lower()
+    is_action_request = any(verb in query_lower for verb in ["apply", "raise", "create", "request", "lodge", "submit", "change", "cancel", "correct", "update", "delete", "remove", "modify", "check", "mark", "register", "do", "perform"])
+    is_supported_erp = any(x in query_lower for x in ["ticket", "feedback", "review", "rate", "rating", "suggestion", "improve", "enhancement"])
+
+    if is_action_request and not is_supported_erp:
+        return "I cannot directly perform this action or administrative correction (I can only create support tickets, feedback, and suggestions)."
+
     context_parts = vector_search(query, k=5)
 
     if not context_parts:

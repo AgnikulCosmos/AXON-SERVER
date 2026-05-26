@@ -174,23 +174,26 @@ async def route_query(query: str) -> str:
 
     query_lower = query.lower()
 
+    # Bypasses ERP ticket/feedback/suggestion creation checks for leave queries
+    is_leave_query = any(kw in query_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday"])
+
     # 1. Detect ERP ticket creation by keywords
     ticket_create_keywords = [
         "raise a", "create a", "lodge a", "submit a",
         "ticket", "support ticket", "erp ticket",
         "raise support", "create support"
     ]
-    if any(kw in query_lower for kw in ticket_create_keywords):
+    if not is_leave_query and any(kw in query_lower for kw in ticket_create_keywords):
         return "ERP_ROUTE:erp_tickets_create"
 
     # 2. Detect feedback creation by keywords
     feedback_keywords = ["give feedback", "submit feedback", "review"]
-    if any(kw in query_lower for kw in feedback_keywords):
+    if not is_leave_query and any(kw in query_lower for kw in feedback_keywords):
         return "ERP_ROUTE:erp_feedback_create"
 
     # 3. Detect suggestion creation by keywords
     suggestion_keywords = ["suggestion", "improve", "enhancement"]
-    if any(kw in query_lower for kw in suggestion_keywords):
+    if not is_leave_query and any(kw in query_lower for kw in suggestion_keywords):
         return "ERP_ROUTE:erp_suggestion_create"
 
     # 4. Detect organization/company related questions
