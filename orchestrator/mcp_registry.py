@@ -97,6 +97,36 @@ def list_erp_apps(
     )
 
 
+def create_lost_found(**kwargs: Any) -> dict:
+    return _call(
+        "core.factory.api.post_data",
+        "POST",
+        {**kwargs, "key": "lf_create"},
+    )
+
+
+def list_lost_found(
+    from_date: str | None = None,
+    to_date: str | None = None,
+    start: int = 0,
+    limit: int = 20,
+    query: str | None = None,
+) -> dict:
+    args = {
+        "key": "lf_list",
+        "from_date": from_date,
+        "to_date": to_date,
+        "start": start,
+        "limit": limit,
+        "query": query,
+    }
+    return _call(
+        "core.factory.api.get_data",
+        "GET",
+        {key: value for key, value in args.items() if value is not None},
+    )
+
+
 def list_erp_feedback(
     from_date: str | None = None,
     to_date: str | None = None,
@@ -197,6 +227,20 @@ MCP_REGISTRY: dict[str, MCPTool] = {
         method="erp_support.get_api.get_fb_sg",
         http_method="GET",
         handler=list_erp_suggestions,
+    ),
+    "lost_found_create": MCPTool(
+        name="lost_found_create",
+        description="Report a lost item or update/mark an item as found.",
+        method="core.factory.api.post_data",
+        http_method="POST",
+        handler=create_lost_found,
+    ),
+    "lost_found_list": MCPTool(
+        name="lost_found_list",
+        description="List active lost and found records.",
+        method="core.factory.api.get_data",
+        http_method="GET",
+        handler=list_lost_found,
     ),
 }
 

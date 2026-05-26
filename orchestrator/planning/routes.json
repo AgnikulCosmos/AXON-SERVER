@@ -887,5 +887,91 @@
       "ratings",
       "attachments"
     ]
+  },
+  {
+    "route_name": "lost_found_create",
+    "description": "Report a lost item, record an item as lost, or mark/update a lost item as found. Use this when the user says they lost something (like a phone, keys, charger, card) or found a lost item.",
+    "examples": [
+      "I lost my phone in the canteen today",
+      "report a lost item keys in corridor",
+      "mark LF-26-0526-08242 as found",
+      "I found the keys at reception",
+      "mark my lost item as found",
+      "record lost charger in lab"
+    ],
+    "doctype": "Lost And Found",
+    "frappe_method": "core.factory.api.post_data",
+    "parameters": {
+      "name": "string",
+      "item_name": "string",
+      "lost_location": "string",
+      "lost_date": "date",
+      "lost_description": "string",
+      "status": [
+        "Pending",
+        "Found",
+        "Cancelled",
+        "Acknowledge"
+      ],
+      "found_location": "string",
+      "found_date": "date",
+      "found_description": "string"
+    },
+    "field_mapping": {
+      "name": "name",
+      "item_name": "item_name",
+      "lost_location": "lost_location",
+      "lost_date": "lost_date",
+      "lost_description": "lost_description",
+      "status": "status",
+      "found_location": "found_location",
+      "found_date": "found_date",
+      "found_description": "found_description"
+    },
+    "available_fields": [
+      "name",
+      "item_name",
+      "lost_location",
+      "lost_date",
+      "lost_description",
+      "status",
+      "found_location",
+      "found_date",
+      "found_description"
+    ]
+  },
+  {
+    "route_name": "lost_found_list",
+    "description": "List, show, or view lost and found items or records. Use this when the user wants to see what has been reported lost.",
+    "examples": [
+      "show all lost items",
+      "list lost and found records",
+      "show lost ones",
+      "what items are lost?",
+      "list lost items"
+    ],
+    "doctype": "Lost And Found",
+    "frappe_method": "core.factory.api.get_data",
+    "parameters": {
+      "status": "string"
+    },
+    "field_mapping": {
+      "status": "status"
+    },
+    "available_fields": [
+      "name",
+      "item_name",
+      "lost_location",
+      "lost_date",
+      "upload_image",
+      "lost_description",
+      "status",
+      "creation",
+      "owner",
+      "found_location",
+      "found_date",
+      "found_description",
+      "found_by"
+    ]
   }
 ]

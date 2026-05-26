@@ -37,6 +37,53 @@ PROFANITY_FALLBACK = (
 TEST_MODE = False
 
 
+async def _get_friendly_missing_fields_message(fields: list[str]) -> str:
+    from orchestrator.erp_support_client import _FIELD_LABELS, _FIELD_HINTS
+    
+    is_lost = any("lost" in f for f in fields) or any(f in {"item_name", "lost_description", "lost_location", "lost_date"} for f in fields)
+    
+    if is_lost:
+        single_greeting = "I'm sorry to hear you've lost your item. Let's get this reported right away so we can track it down. I just need one more detail to proceed:"
+        multi_greeting = "I'm sorry to hear you've lost your item. Let's get this reported right away so we can track it down. Please provide the following details:"
+    else:
+        single_greeting = "Thank you for reporting this found item! Let's get this registered in the system. I just need one more detail to proceed:"
+        multi_greeting = "Thank you for reporting this found item! Let's get this registered in the system. Please provide the following details:"
+    
+    # 1. Single missing field
+    if len(fields) == 1:
+        field = fields[0]
+        label = _FIELD_LABELS.get(field, field.replace("_", " "))
+        hint = _FIELD_HINTS.get(field, "")
+        hint_text = f" (e.g., *{hint}*)" if hint else ""
+        return (
+            f"{single_greeting}\n\n"
+            f"• **{label}**{hint_text}\n\n"
+            f"Please copy, fill out, and reply with the template below:\n"
+            f"```text\n"
+            f"{field}: <value>\n"
+            f"```"
+        )
+    
+    # 2. Multiple missing fields
+    lines = [
+        f"{multi_greeting}\n"
+    ]
+    
+    template_lines = []
+    for field in fields:
+        label = _FIELD_LABELS.get(field, field.replace("_", " "))
+        hint = _FIELD_HINTS.get(field, "")
+        hint_text = f" — *{hint}*" if hint else ""
+        
+        lines.append(f"• **{label}**{hint_text}")
+        template_lines.append(f"{field}: <value>")
+        
+    lines.append("\nPlease copy, fill out, and reply with the template below:")
+    lines.append(f"```text\n" + "\n".join(template_lines) + "\n```")
+    
+    return "\n".join(lines)
+
+
 async def run_agent(query: str, frappe_headers: dict | None = None, session_id: str | None = None):
     header_token = set_frappe_request_headers(frappe_headers)
     try:
@@ -108,7 +155,7 @@ def _is_erp_ticket_creation_query(query: str) -> bool:
     has_creation_verb = any(x in q_lower for x in creation_verbs)
     
     # Skip leaves / checkins / other unrelated administrative creations
-    is_unrelated_creation = any(kw in q_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday", "checkin", "check out", "checkout", "check-in", "payroll", "salary slip"])
+    is_unrelated_creation = any(kw in q_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday", "checkin", "check out", "checkout", "check-in", "payroll", "salary slip", "lost", "found"])
     
     return has_creation_verb and has_ticket_ref and not is_unrelated_creation
 
@@ -118,7 +165,7 @@ def _is_erp_feedback_creation_query(query: str) -> bool:
     q_lower = query.lower()
     feedback_keywords = ["give feedback", "submit feedback", "review", "rate", "rating"]
     has_feedback_ref = any(kw in q_lower for kw in feedback_keywords)
-    is_unrelated = any(kw in q_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday", "checkin", "check-out", "checkout", "check-in", "payroll"])
+    is_unrelated = any(kw in q_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday", "checkin", "check-out", "checkout", "check-in", "payroll", "lost", "found"])
     return has_feedback_ref and not is_unrelated
 
 
@@ -127,12 +174,25 @@ def _is_erp_suggestion_creation_query(query: str) -> bool:
     q_lower = query.lower()
     suggestion_keywords = ["suggestion", "improve", "enhancement", "feature request"]
     has_suggestion_ref = any(kw in q_lower for kw in suggestion_keywords)
-    is_unrelated = any(kw in q_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday", "checkin", "check-out", "checkout", "check-in", "payroll"])
+    is_unrelated = any(kw in q_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday", "checkin", "check-out", "checkout", "check-in", "payroll", "lost", "found"])
     return has_suggestion_ref and not is_unrelated
+
+
+def _is_lost_found_create_query(query: str) -> bool:
+    q_lower = query.lower()
+    lost_create_keywords = ["lost my", "lost a", "report a lost", "record a lost", "report lost", "record lost", "lost item"]
+    found_create_keywords = ["found a", "found my", "mark as found", "mark found", "mark erp lost as found"]
+    return any(kw in q_lower for kw in lost_create_keywords) or any(kw in q_lower for kw in found_create_keywords) or ("mark " in q_lower and " as found" in q_lower)
+
+def _is_lost_found_list_query(query: str) -> bool:
+    q_lower = query.lower()
+    lost_list_keywords = ["list lost", "show lost", "view lost", "lost items", "lost ones", "lost and found"]
+    return any(kw in q_lower for kw in lost_list_keywords)
 
 
 async def _run_agent(query: str, session_id: str | None = None):
     q = query.lower().strip("!?.,")
+    logger.debug(f"[Session Tracking] Query: {query!r}, session_id: {session_id!r}, in_pending: {session_id in PENDING_ERP_SESSIONS if session_id else False}")
 
     # ── Check for pending ERP session ──────────────────────────────
     if session_id and session_id in PENDING_ERP_SESSIONS:
@@ -158,13 +218,26 @@ async def _run_agent(query: str, session_id: str | None = None):
             if key and val:
                 structured_params[key] = val
 
+        # Flexible parameter mapping for common user variations
+        if "description" in structured_params:
+            desc_val = structured_params.pop("description")
+            if "found" in pending_plan.get("route_name", ""):
+                structured_params["found_description"] = desc_val
+            else:
+                structured_params["lost_description"] = desc_val
+        if "item_description" in structured_params:
+            desc_val = structured_params.pop("item_description")
+            if "found" in pending_plan.get("route_name", ""):
+                structured_params["found_description"] = desc_val
+            else:
+                structured_params["lost_description"] = desc_val
+
         if structured_params:
             new_params = structured_params
         elif len(missing_fields) == 1:
             new_params = {missing_fields[0]: query.strip()}
         else:
-            from orchestrator.erp_support_client import _missing_fields_message
-            result = _missing_fields_message(missing_fields)
+            result = await _get_friendly_missing_fields_message(missing_fields)
             sys.stdout.write(f"{MARKER_FINAL_START}\n")
             await stream_text_word_by_word(result)
             sys.stdout.write(f"{MARKER_FINAL_END}\n")
@@ -188,7 +261,13 @@ async def _run_agent(query: str, session_id: str | None = None):
         plan = pending_plan
     else:
         # ── First, check for ERP creation queries directly ──────────
-        if _is_erp_ticket_creation_query(query):
+        if _is_lost_found_create_query(query):
+            route = "ERP_ROUTE:lost_found_create"
+            plan = _build_erp_plan("lost_found_create", query)
+        elif _is_lost_found_list_query(query):
+            route = "ERP_ROUTE:lost_found_list"
+            plan = _build_erp_plan("lost_found_list", query)
+        elif _is_erp_ticket_creation_query(query):
             route = "ERP_ROUTE:erp_tickets_create"
             plan = _build_erp_plan("erp_tickets_create", query)
         elif _is_erp_feedback_creation_query(query):
@@ -265,7 +344,7 @@ async def _run_agent(query: str, session_id: str | None = None):
             filters = plan.get("filters") or {}
             
             try:
-                if method.startswith("erp_support."):
+                if method.startswith("erp_support.") or route_name.startswith("lost_found_"):
                     tool_response = execute_erp_support_plan(plan)
                     result = format_erp_support_response(plan, tool_response)
                     if session_id and session_id in PENDING_ERP_SESSIONS:
@@ -284,7 +363,7 @@ async def _run_agent(query: str, session_id: str | None = None):
                 if session_id:
                     plan["_missing_fields"] = e.fields
                     PENDING_ERP_SESSIONS[session_id] = plan
-                result = str(e)
+                result = await _get_friendly_missing_fields_message(e.fields)
             except ValueError as e:
                 result = str(e)
             except Exception as e:

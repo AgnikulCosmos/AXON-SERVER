@@ -177,6 +177,17 @@ async def route_query(query: str) -> str:
     # Bypasses ERP ticket/feedback/suggestion creation checks for leave queries
     is_leave_query = any(kw in query_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday"])
 
+    # Detect Lost and Found creation/reporting
+    lost_create_keywords = ["lost my", "lost a", "report a lost", "record a lost", "report lost", "record lost", "lost item"]
+    found_create_keywords = ["found a", "found my", "mark as found", "mark found", "mark erp lost as found"]
+    
+    if any(kw in query_lower for kw in lost_create_keywords) or any(kw in query_lower for kw in found_create_keywords) or ("mark " in query_lower and " as found" in query_lower):
+        return "ERP_ROUTE:lost_found_create"
+        
+    lost_list_keywords = ["list lost", "show lost", "view lost", "lost items", "lost ones", "lost and found"]
+    if any(kw in query_lower for kw in lost_list_keywords):
+        return "ERP_ROUTE:lost_found_list"
+
     # 1. Detect ERP ticket creation by keywords
     ticket_create_keywords = [
         "raise a", "create a", "lodge a", "submit a",

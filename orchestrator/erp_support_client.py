@@ -31,6 +31,14 @@ _FIELD_LABELS = {
     "attachments": "Attachments",
     "roles": "Roles",
     "status": "Status",
+    "name": "Record Name",
+    "item_name": "Item Name",
+    "lost_location": "Lost Location",
+    "lost_date": "Lost Date",
+    "lost_description": "Lost Description",
+    "found_location": "Found Location",
+    "found_date": "Found Date",
+    "found_description": "Found Description",
 }
 
 _FIELD_HINTS = {
@@ -41,6 +49,14 @@ _FIELD_HINTS = {
     "feedback": "Your suggestions or feedback",
     "ratings": "1 to 5 stars",
     "helps": "How this suggestion helps the organization",
+    "name": "e.g., LF-26-0526-08242",
+    "item_name": "What is the name of the lost item?",
+    "lost_location": "Where did you lose the item?",
+    "lost_date": "e.g., today, yesterday, or YYYY-MM-DD",
+    "lost_description": "A description of the lost item",
+    "found_location": "Where did you find the item?",
+    "found_date": "e.g., today, yesterday, or YYYY-MM-DD",
+    "found_description": "Any comments about finding it",
 }
 
 
@@ -203,6 +219,26 @@ def execute_erp_support_plan(plan: dict) -> dict:
     route_name = plan.get("route_name")
     params = dict(plan.get("parameters") or {})
 
+    if route_name == "lost_found_create":
+        from orchestrator.mcp_registry import create_lost_found
+        status = params.get("status") or "Pending"
+        if status == "Found" or "name" in params:
+            payload = _require(params, ["name", "found_location", "found_date", "found_description"])
+            payload.update({
+                "status": "Found"
+            })
+        else:
+            payload = _require(params, ["item_name", "lost_location", "lost_date", "lost_description"])
+            payload.update({
+                "status": "Pending",
+                "upload_image": params.get("upload_image") or ""
+            })
+        return create_lost_found(**payload)
+
+    if route_name == "lost_found_list":
+        from orchestrator.mcp_registry import list_lost_found
+        return list_lost_found(**_list_params(params))
+
     if route_name == "erp_support_view_details":
         return view_erp_support_details(**_require(params, ["docname"]))
 
@@ -234,6 +270,9 @@ def format_erp_support_response(plan: dict, response: dict) -> str:
         else:
             details = data if isinstance(data, dict) else {}
         return _format_details(details) if details else "I could not find details for that ERP Support record."
+
+    if plan.get("route_name") == "lost_found_list":
+        return _format_lost_found_list(data)
 
     if plan.get("route_name") in {"erp_tickets_list", "erp_feedback_list", "erp_suggestions_list"}:
         return _format_list_response(plan.get("route_name"), data)
@@ -347,3 +386,54 @@ def _flatten_records(data) -> list[dict]:
                 records.extend(item for item in value if isinstance(item, dict))
         return records
     return []
+
+
+def get_current_user_email() -> str:
+    try:
+        from orchestrator.mcp_registry import _call
+        user_info = _call("axon.api.get_user_info", "GET", {})
+        message = user_info.get("message") or {}
+        return message.get("email") or ""
+    except Exception:
+        return ""
+
+
+def _format_lost_found_list(data) -> str:
+    if not isinstance(data, dict) or data.get("status") == "error":
+        return data.get("message", "I could not fetch Lost & Found records.") if isinstance(data, dict) else str(data)
+
+    records = _flatten_records(data.get("data"))
+    
+    # Filter to only lost ones (status == "Pending")
+    lost_records = [r for r in records if r.get("status") == "Pending"]
+    
+    if not lost_records:
+        return "No pending lost items reported."
+
+    current_user = get_current_user_email()
+    
+    lines = [f"### 🔍 Active Lost Items ({len(lost_records)})"]
+    for record in lost_records:
+        name = record.get("name")
+        item_name = record.get("item_name")
+        location = record.get("lost_location")
+        date_str = record.get("lost_date")
+        desc = record.get("lost_description") or "No description provided"
+        owner = record.get("owner")
+        emp_name = record.get("employee_name") or owner
+        
+        card = [
+            f"**📦 {item_name}** ({name})",
+            f"📍 *Location:* {location} | 📅 *Date:* {date_str}",
+            f"👤 *Reported by:* {emp_name}",
+            f"📝 *Description:* {desc}"
+        ]
+        
+        # Display the mark found button only if the record belongs to the current user
+        if owner == current_user:
+            card.append(f"[action:mark_found:{name}](action:mark_found:{name})")
+            
+        lines.append("\n".join(card))
+        lines.append("---")
+        
+    return "\n\n".join(lines)

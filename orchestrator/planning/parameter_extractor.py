@@ -255,6 +255,10 @@ def _keyword_extract(query: str, schema: dict) -> dict:
                 extracted[param] = True
         # ── String / number — skip in keyword mode (too ambiguous) ──────
         # String/number values are best left to LLM extraction
+        elif param == "name":
+            lf_name = re.search(r"\b(LF-\d{2}-\d{4}-\d{4,6})\b", query, re.I)
+            if lf_name:
+                extracted[param] = lf_name.group(1).upper()
 
     return extracted
 

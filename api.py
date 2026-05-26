@@ -46,6 +46,7 @@ class QueryRequest(BaseModel):
     message: Optional[str] = None
     content: Optional[str] = None
     text: Optional[str] = None
+    session_id: Optional[str] = None
     timeout: Optional[int] = DEFAULT_TIMEOUT
 
     def normalized_query(self) -> str:
@@ -116,7 +117,7 @@ async def query_endpoint(req: QueryRequest, request: Request):
     try:
         # Run agent with timeout
         result = await asyncio.wait_for(
-            run_agent(question, frappe_headers_from_request(request)),
+            run_agent(question, frappe_headers_from_request(request), req.session_id),
             timeout=req.timeout or DEFAULT_TIMEOUT
         )
 
