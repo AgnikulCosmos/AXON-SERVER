@@ -21,18 +21,14 @@ _summarizer_llm = ChatOllama(
     base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 )
 
-_summary_template = """
-Based on the following knowledge base context, answer the user's question directly. 
-If the answer is not in the context, say "I don't have enough information to answer that."
-
-Context:
+_summary_template = """Context:
 {context}
 
 Question:
 {question}
 
-Answer:
-"""
+Answer the question directly based on the context above. Keep it concise.
+Answer:"""
 
 _prompt = PromptTemplate.from_template(_summary_template)
 _summary_chain = _prompt | _summarizer_llm | StrOutputParser()
@@ -123,7 +119,10 @@ def vector_search(query: str, k: int = 5) -> list:
         if retriever is None:
             raise RuntimeError("Vector retriever unavailable")
 
-        docs = retriever.get_relevant_documents(query)
+        if hasattr(retriever, "invoke"):
+            docs = retriever.invoke(query)
+        else:
+            docs = retriever.get_relevant_documents(query)
         results = [getattr(doc, "page_content", "") for doc in docs if getattr(doc, "page_content", "")]
         if results:
             return results[:k]

@@ -24,7 +24,7 @@ def main():
     if not DATASET_PATH.exists():
         raise FileNotFoundError(f"{DATASET_PATH} not found")
 
-    with open(DATASET_PATH, "r", encoding="utf-8") as f:
+    with open(DATASET_PATH, "r", encoding="utf-8ERP_I_.####") as f:
         data = json.load(f)
 
     updated = 0

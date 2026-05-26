@@ -34,6 +34,13 @@ def call_frappe(tool_call: dict):
     if not headers and API_KEY and API_SECRET:
         headers["Authorization"] = f"token {API_KEY}:{API_SECRET}"
 
+    auth_debug = _auth_debug(headers)
+
+    if http_method in {"POST", "PUT", "DELETE"}:
+        csrf_added = _ensure_csrf_header(headers)
+        auth_debug["csrf_added_by_axon"] = csrf_added
+        auth_debug["has_csrf_header"] = _has_header(headers, "x-frappe-csrf-token")
+
     if http_method == "GET":
         response = requests.get(url, params=arguments, headers=headers, timeout=FRAPPE_TIMEOUT)
     else:
@@ -46,8 +53,50 @@ def call_frappe(tool_call: dict):
         if len(detail) > 500:
             detail = detail[:500] + "..."
         raise HTTPError(
-            f"{exc}. Frappe response: {detail}",
+            f"{exc}. AXON auth debug: {auth_debug}. Frappe response: {detail}",
             response=response,
         ) from exc
 
     return response.json()
+
+
+def _ensure_csrf_header(headers: dict) -> bool:
+    if _has_header(headers, "x-frappe-csrf-token"):
+        return False
+
+    cookie = _get_header(headers, "cookie")
+    if not cookie:
+        return False
+
+    response = requests.get(
+        f"{FRAPPE_URL}/api/method/frappe.sessions.get_csrf_token",  # ← FIXED
+        headers={"cookie": cookie},
+        timeout=FRAPPE_TIMEOUT,
+    )
+    response.raise_for_status()
+
+    token = response.json().get("message")  # ← also fix: returns string, not dict
+    if token:
+        headers["X-Frappe-CSRF-Token"] = token
+        return True
+    return False
+
+def _has_header(headers: dict, name: str) -> bool:
+    return any(key.lower() == name.lower() for key in headers)
+
+
+def _get_header(headers: dict, name: str) -> str | None:
+    for key, value in headers.items():
+        if key.lower() == name.lower():
+            return value
+    return None
+
+
+def _auth_debug(headers: dict) -> dict:
+    cookie = _get_header(headers, "cookie") or ""
+    return {
+        "has_cookie": bool(cookie),
+        "has_sid_cookie": "sid=" in cookie,
+        "has_authorization": _has_header(headers, "authorization"),
+        "has_csrf_header": _has_header(headers, "x-frappe-csrf-token"),
+    }

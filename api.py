@@ -27,7 +27,7 @@ app = FastAPI(title="Agnikul Agent API", version="1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -324,7 +324,8 @@ async def stream_query(request: Request):
 
         try:
             # Start agent as a background task so we can poll its stdout
-            task = asyncio.create_task(run_agent(question, frappe_headers_from_request(request)))
+            session_id = body.get("session_id")
+            task = asyncio.create_task(run_agent(question, frappe_headers_from_request(request), session_id))
 
             # While the agent is running, repeatedly check for new output and yield it
             while not task.done():

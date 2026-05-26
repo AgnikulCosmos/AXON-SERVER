@@ -1,18 +1,202 @@
 from datetime import date
+from typing import Optional, Any
+import re
 
 from orchestrator.mcp_registry import (
     create_erp_feedback,
     create_erp_suggestion,
     create_erp_ticket,
+    list_erp_apps,
     list_erp_feedback,
     list_erp_suggestions,
     list_erp_tickets,
     view_erp_support_details,
 )
 
-
 CREATE_METHOD = "erp_support.put_api.create"
 VIEW_METHOD = "erp_support.get_api.view_details"
+
+# Cache for valid app names
+_VALID_APP_NAMES_CACHE: Optional[list] = None
+_APP_NAME_MAPPING_CACHE: Optional[dict] = None
+
+_FIELD_LABELS = {
+    "app_name": "Application Name",
+    "priority": "Priority",
+    "module": "Module",
+    "description": "Description",
+    "feedback": "Feedback/Suggestion",
+    "ratings": "Rating",
+    "helps": "Helps",
+    "attachments": "Attachments",
+    "roles": "Roles",
+    "status": "Status",
+}
+
+_FIELD_HINTS = {
+    "app_name": "e.g., Fleet Management, HR Operations",
+    "priority": "Low, Medium, or High",
+    "module": "e.g., Vehicle Tracking, Leave",
+    "description": "A detailed description of the issue",
+    "feedback": "Your suggestions or feedback",
+    "ratings": "1 to 5 stars",
+    "helps": "How this suggestion helps the organization",
+}
+
+
+def _get_valid_app_names() -> list:
+    """Fetch valid app names from Frappe with caching."""
+    global _VALID_APP_NAMES_CACHE
+    
+    if _VALID_APP_NAMES_CACHE is not None:
+        return _VALID_APP_NAMES_CACHE
+        
+    try:
+        response = list_erp_apps(limit=200)
+        data = response.get("message", response) if isinstance(response, dict) else {}
+        records = _flatten_records(data.get("data"))
+        _VALID_APP_NAMES_CACHE = [str(record.get("name", "")).strip() for record in records if record.get("name")]
+        return _VALID_APP_NAMES_CACHE
+    except Exception:
+        # Fallback to default values (do not cache, so next authenticated call can retry)
+        return [
+            "core", "erp_support", "fleet_management", "food",
+            "hr_operations", "maintenance_management", "packaging_management",
+        ]
+
+
+def _normalize_app_name(user_input: str) -> Optional[str]:
+    """
+    Find the closest matching valid app name for the user's input.
+    Supports partial matching and aliases.
+    """
+    if not user_input:
+        return None
+    
+    user_input_lower = user_input.strip().lower()
+    valid_names = _get_valid_app_names()
+    
+    # First, try exact match (case-insensitive)
+    for name in valid_names:
+        if name.lower() == user_input_lower:
+            return name
+    
+    # Second, try alias mapping from APP_NAME_MAPPING
+    from orchestrator.planning.parameter_extractor import APP_NAME_MAPPING
+    for canonical, aliases in APP_NAME_MAPPING.items():
+        if user_input_lower == canonical.lower():
+            # Check if canonical exists in valid_names
+            for valid in valid_names:
+                if valid.lower() == canonical.lower():
+                    return valid
+        for alias in aliases:
+            if user_input_lower == alias.lower():
+                for valid in valid_names:
+                    if valid.lower() == canonical.lower():
+                        return valid
+    
+    # Third, try partial matching (e.g., "Fleet" matches "Fleet Management")
+    for name in valid_names:
+        if user_input_lower in name.lower() or name.lower() in user_input_lower:
+            return name
+    
+    return None
+
+
+def _validate_and_fix_app_name(params: dict, fields: list) -> tuple[dict, list]:
+    """
+    Validate and fix app_name in params. Returns (fixed_params, missing_fields).
+    """
+    missing = []
+    fixed_params = dict(params)
+    
+    for field in fields:
+        if field == "app_name":
+            raw_app_name = params.get("app_name")
+            if raw_app_name in (None, ""):
+                missing.append(field)
+            else:
+                normalized = _normalize_app_name(str(raw_app_name))
+                if normalized:
+                    fixed_params["app_name"] = normalized
+                else:
+                    # App name not found - add to missing with helpful message
+                    missing.append(field)
+                    fixed_params["_app_name_error"] = f"'{raw_app_name}' is not a valid application name"
+        elif params.get(field) in (None, ""):
+            missing.append(field)
+    
+    return fixed_params, missing
+
+
+def _require(params: dict, fields: list[str]) -> dict:
+    """Require fields, with special handling for app_name validation."""
+    # First, validate and fix app_name
+    fixed_params, missing = _validate_and_fix_app_name(params, fields)
+    
+    if missing:
+        # Check if app_name error needs special handling
+        app_error = fixed_params.get("_app_name_error")
+        if app_error and "app_name" in missing:
+            # Remove app_name from missing since we have a specific error
+            missing.remove("app_name")
+            if missing:
+                raise MissingParametersError(missing, extra_context=app_error)
+            else:
+                raise MissingParametersError([], extra_context=app_error)
+        
+        if missing:
+            raise MissingParametersError(missing)
+    
+    # Return only the required fields
+    result = {field: fixed_params[field] for field in fields if field in fixed_params}
+    return result
+
+
+# Update MissingParametersError to support extra context
+class MissingParametersError(ValueError):
+    def __init__(self, fields: list[str], extra_context: str = None):
+        self.fields = fields
+        self.extra_context = extra_context
+        super().__init__(_missing_fields_message(fields, extra_context))
+
+
+def _missing_fields_message(fields: list[str], extra_context: str = None) -> str:
+    """Generate missing fields message with optional extra context."""
+    if extra_context:
+        return extra_context
+    
+    if len(fields) == 1:
+        field = fields[0]
+        label = _FIELD_LABELS.get(field, field.replace("_", " "))
+        hint = _FIELD_HINTS.get(field, "")
+        hint_text = f" ({hint})" if hint else ""
+        
+        # Special handling for app_name
+        if field == "app_name":
+            valid_names = _get_valid_app_names()
+            valid_list = "\n  • " + "\n  • ".join(valid_names[:10])
+            if len(valid_names) > 10:
+                valid_list += f"\n  • ... and {len(valid_names) - 10} more"
+            return (
+                f"I need the **application name** to continue. Valid applications are:\n{valid_list}\n\n"
+                f"Please reply with: `app_name: <application name>`"
+            )
+        
+        return (
+            f"I just need the **{label}** to continue. "
+            f"Please reply in this format:\n\n"
+            f"`{field}: <value>`{hint_text}"
+        )
+    
+    lines = ["Please provide the following details to continue:\n"]
+    for field in fields:
+        label = _FIELD_LABELS.get(field, field.replace("_", " "))
+        hint = _FIELD_HINTS.get(field, "")
+        hint_text = f"  ← {hint}" if hint else ""
+        lines.append(f"`{field}: <value>`  — {label}{hint_text}")
+    lines.append("\nReply with all fields filled in, one per line.")
+    return "\n".join(lines)
 
 
 def execute_erp_support_plan(plan: dict) -> dict:
@@ -93,14 +277,6 @@ def _list_params(params: dict) -> dict:
     cleaned.setdefault("start", 0)
     cleaned.setdefault("limit", 20)
     return cleaned
-
-
-def _require(params: dict, fields: list[str]) -> dict:
-    missing = [field for field in fields if params.get(field) in (None, "")]
-    if missing:
-        readable = ", ".join(field.replace("_", " ") for field in missing)
-        raise ValueError(f"Please provide {readable} to continue.")
-    return {field: params[field] for field in fields}
 
 
 def _copy_optional(payload: dict, params: dict, fields: list[str]) -> None:

@@ -1,5 +1,9 @@
 import sys
 import json
+import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 from common.router import route_query
 from common.rag_tool import rag_search
@@ -11,8 +15,11 @@ from orchestrator.erp_tool_dispatcher import prepare_tool_call
 from orchestrator.erp_support_client import (
     execute_erp_support_plan,
     format_erp_support_response,
+    MissingParametersError,
 )
 from orchestrator.planning import router_pipeline
+from orchestrator.planning.parameter_extractor import extract_parameters
+from orchestrator.planning.semantic_router import SemanticRouter
 from orchestrator.agent import (
     MARKER_FINAL_START,
     MARKER_FINAL_END,
@@ -30,25 +37,174 @@ PROFANITY_FALLBACK = (
 TEST_MODE = False
 
 
-async def run_agent(query: str, frappe_headers: dict | None = None):
+async def run_agent(query: str, frappe_headers: dict | None = None, session_id: str | None = None):
     header_token = set_frappe_request_headers(frappe_headers)
     try:
-        return await _run_agent(query)
+        return await _run_agent(query, session_id)
     finally:
         reset_frappe_request_headers(header_token)
 
 
-async def _run_agent(query: str):
-    # print("ROUTE QUERY RECEIVED:", query)
-    # route = await route_query(query)
-    # print("ROUTE DECIDED:", route)
+# ── Persistent pending session store (survives hot-reloads) ──────────────
+import json as _json
+
+_PENDING_FILE = os.path.join(os.path.dirname(__file__), ".pending_sessions.json")
+
+
+def _load_pending() -> dict:
+    try:
+        with open(_PENDING_FILE) as _f:
+            return _json.load(_f)
+    except Exception:
+        return {}
+
+
+def _save_pending(data: dict) -> None:
+    try:
+        with open(_PENDING_FILE, "w") as _f:
+            _json.dump(data, _f)
+    except Exception:
+        pass
+
+
+class _PersistentDict:
+    """Dict-like wrapper backed by a JSON file so state survives reloads."""
+
+    def __contains__(self, key):
+        return key in _load_pending()
+
+    def __getitem__(self, key):
+        return _load_pending()[key]
+
+    def __setitem__(self, key, value):
+        data = _load_pending()
+        data[key] = value
+        _save_pending(data)
+
+    def __delitem__(self, key):
+        data = _load_pending()
+        data.pop(key, None)
+        _save_pending(data)
+
+    def get(self, key, default=None):
+        return _load_pending().get(key, default)
+
+    def keys(self):
+        return _load_pending().keys()
+
+
+PENDING_ERP_SESSIONS = _PersistentDict()
+
+
+def _is_erp_ticket_creation_query(query: str) -> bool:
+    """Detect if the query is for creating an ERP support ticket."""
+    q_lower = query.lower()
+    
+    # Ticket creation keywords
+    ticket_keywords = [
+        "raise a", "create a", "lodge a", "submit a", 
+        "report a", "open a", "file a",
+        "ticket", "support ticket", "erp ticket",
+        "raise support", "create support",
+        "raise ticket", "create ticket"
+    ]
+    
+    # Check if any ticket creation phrase is present
+    for keyword in ticket_keywords:
+        if keyword in q_lower:
+            return True
+    
+    return False
+
+
+def _is_erp_feedback_creation_query(query: str) -> bool:
+    """Detect if the query is for creating ERP feedback/review."""
+    q_lower = query.lower()
+    feedback_keywords = ["give feedback", "submit feedback", "review", "rate", "rating"]
+    return any(kw in q_lower for kw in feedback_keywords)
+
+
+def _is_erp_suggestion_creation_query(query: str) -> bool:
+    """Detect if the query is for creating ERP suggestion."""
+    q_lower = query.lower()
+    suggestion_keywords = ["suggestion", "improve", "enhancement", "feature request"]
+    return any(kw in q_lower for kw in suggestion_keywords)
+
+
+async def _run_agent(query: str, session_id: str | None = None):
+    q = query.lower().strip("!?.,")
+
+    # ── Check for pending ERP session ──────────────────────────────
+    if session_id and session_id in PENDING_ERP_SESSIONS:
+        if q in ["cancel", "stop", "abort", "nevermind", "quit", "exit"]:
+            del PENDING_ERP_SESSIONS[session_id]
+            msg = "Okay, I've cancelled that request."
+            sys.stdout.write(f"{MARKER_FINAL_START}\n")
+            await stream_text_word_by_word(msg)
+            sys.stdout.write(f"{MARKER_FINAL_END}\n")
+            sys.stdout.flush()
+            return msg
+
+        pending_plan = PENDING_ERP_SESSIONS[session_id]
+        missing_fields = pending_plan.get("_missing_fields") or []
+
+        # ── Parse structured "field: value" reply ──────────────────
+        import re as _re
+        structured_params = {}
+        matches = _re.finditer(r"\b([a-zA-Z_]+)\s*:\s*(.*?)(?=\s+\b[a-zA-Z_]+\s*:|$)", query, flags=_re.S)
+        for match in matches:
+            key = match.group(1).strip().lower().replace(" ", "_")
+            val = match.group(2).strip().lstrip("`").rstrip("`")
+            if key and val:
+                structured_params[key] = val
+
+        if structured_params:
+            new_params = structured_params
+        elif len(missing_fields) == 1:
+            new_params = {missing_fields[0]: query.strip()}
+        else:
+            from orchestrator.erp_support_client import _missing_fields_message
+            result = _missing_fields_message(missing_fields)
+            sys.stdout.write(f"{MARKER_FINAL_START}\n")
+            await stream_text_word_by_word(result)
+            sys.stdout.write(f"{MARKER_FINAL_END}\n")
+            sys.stdout.flush()
+            return result
+
+        # Normalise app_name aliases in the reply
+        if "app_name" in new_params:
+            from orchestrator.planning.parameter_extractor import APP_NAME_MAPPING
+            cand = new_params["app_name"].strip().lower()
+            for canonical, aliases in APP_NAME_MAPPING.items():
+                if cand == canonical.lower() or any(cand == a.lower() for a in aliases):
+                    new_params["app_name"] = canonical
+                    break
+
+        if pending_plan.get("parameters") is None:
+            pending_plan["parameters"] = {}
+        pending_plan["parameters"].update(new_params)
+
+        route = f"ERP_ROUTE:{pending_plan['route_name']}"
+        plan = pending_plan
+    else:
+        # ── First, check for ERP creation queries directly ──────────
+        if _is_erp_ticket_creation_query(query):
+            route = "ERP_ROUTE:erp_tickets_create"
+            plan = _build_erp_plan("erp_tickets_create", query)
+        elif _is_erp_feedback_creation_query(query):
+            route = "ERP_ROUTE:erp_feedback_create"
+            plan = _build_erp_plan("erp_feedback_create", query)
+        elif _is_erp_suggestion_creation_query(query):
+            route = "ERP_ROUTE:erp_suggestion_create"
+            plan = _build_erp_plan("erp_suggestion_create", query)
+        else:
+            route = await route_query(query)
+            plan = None
 
     # -------------------------
     # TEST MODE
     # -------------------------
     if TEST_MODE:
-        q = query.lower()
-
         if "who are you" in q:
             return "I am Axon, the ERP assistant for Agnikul."
 
@@ -66,7 +222,6 @@ async def _run_agent(query: str):
     # -------------------------
     # REAL EXECUTION PATH
     # -------------------------
-    q = query.lower().strip("!?.,")
     if "who are you" in q or q == "what is your name" or q == "who is axon" or "what can axon help" in q or "what can you do" in q:
         identity_response = "I am Axon, your friendly internal ERP AI Assistant at Agnikul Cosmos! I can help you with internal systems, HR, payroll, operations, organizational structure, and enterprise workflows."
         sys.stdout.write(f"{MARKER_FINAL_START}\n")
@@ -74,8 +229,6 @@ async def _run_agent(query: str):
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
         sys.stdout.flush()
         return identity_response
-
-    route = await route_query(query)
 
     if route == "PROFANITY":
         sys.stdout.write(f"{MARKER_FINAL_START}\n")
@@ -101,8 +254,11 @@ async def _run_agent(query: str):
         return result
 
     if route.startswith("ERP_ROUTE:"):
-        # ── Run the full Semantic Router Pipeline ──────────────
-        plan = router_pipeline.process(query)
+        route_name = route.split(":", 1)[1]
+        if plan is None:
+            plan = _build_erp_plan(route_name, query)
+            if plan:
+                plan["original_query"] = query
 
         if plan:
             method = plan["method"]
@@ -112,18 +268,28 @@ async def _run_agent(query: str):
                 if method.startswith("erp_support."):
                     tool_response = execute_erp_support_plan(plan)
                     result = format_erp_support_response(plan, tool_response)
+                    if session_id and session_id in PENDING_ERP_SESSIONS:
+                        del PENDING_ERP_SESSIONS[session_id]
                 elif method.startswith("get_") or "list" in method or "query" in method:
                     result = f"Fetching information for {method} with filters {filters}..."
+                    if session_id and session_id in PENDING_ERP_SESSIONS:
+                        del PENDING_ERP_SESSIONS[session_id]
                 else:
                     import random
-                    # Following naming series: ERP_I_.####
                     req_id = f"ERP_I_{random.randint(1000, 9999)}"
-                    # Simulate successful creation in ERP
                     result = f"Successfully created your request and your req_id is {req_id}"
+                    if session_id and session_id in PENDING_ERP_SESSIONS:
+                        del PENDING_ERP_SESSIONS[session_id]
+            except MissingParametersError as e:
+                if session_id:
+                    plan["_missing_fields"] = e.fields
+                    PENDING_ERP_SESSIONS[session_id] = plan
+                result = str(e)
             except ValueError as e:
                 result = str(e)
             except Exception as e:
-                result = f"Error executing ERP method {method}: {str(e)}"
+                logger.exception("Error executing ERP support plan:")
+                result = _friendly_erp_error(e)
         else:
             result = "No matching ERP route could be resolved for your query."
 
@@ -142,7 +308,6 @@ async def _run_agent(query: str):
         sys.stdout.flush()
         return result
 
-
     if route == "TOOLS":
         tool_name, tool_result = await dispatch_tool(query)
 
@@ -150,10 +315,10 @@ async def _run_agent(query: str):
             result = tool_result
         else:
             result = await summarize_tool_output(
-            user_query=query,
-            tool_name=tool_name,
-            tool_data=tool_result
-        )
+                user_query=query,
+                tool_name=tool_name,
+                tool_data=tool_result
+            )
 
         sys.stdout.write(f"{MARKER_FINAL_START}\n")
         await stream_text_word_by_word(str(result).strip())
@@ -165,3 +330,90 @@ async def _run_agent(query: str):
     # DEFAULT: AXON
     # -------------------------
     return await run_axon(query)
+
+
+def _build_erp_plan(route_name: str, query: str) -> dict | None:
+    """Build an ERP plan for a specific route without going through semantic router."""
+    router = SemanticRouter()
+    route_config = next((route for route in router.routes if route.get("route_name") == route_name), None)
+    if not route_config:
+        return None
+
+    extracted_params = extract_parameters(query, route_config)
+    
+    # Special handling for ticket creation - ensure description is extracted
+    if route_name == "erp_tickets_create":
+        import re
+        # Extract description after "Description:" or "issue:"
+        desc_match = re.search(r'(?:Description|description|issue|Issue)\s*[:=]\s*(.+?)(?:$|\.\s+[A-Z])', query, re.IGNORECASE | re.DOTALL)
+        if desc_match and not extracted_params.get("description"):
+            extracted_params["description"] = desc_match.group(1).strip()
+        
+        # Extract module if present
+        module_match = re.search(r'module\s+([A-Za-z0-9_& .-]+?)(?:\s+[A-Z]|\.|$)', query, re.IGNORECASE)
+        if module_match and not extracted_params.get("module"):
+            extracted_params["module"] = module_match.group(1).strip()
+    
+    return {
+        "route_name": route_name,
+        "method": route_config["frappe_method"],
+        "doctype": route_config.get("doctype", ""),
+        "parameters": extracted_params,
+        "filters": None,
+        "fields": [],
+        "confidence": 1.0,
+    }
+
+
+def _friendly_erp_error(exc: Exception) -> str:
+    """Convert raw Frappe API errors into clean, user-readable messages."""
+    import re as _re
+
+    raw = str(exc)
+
+    frappe_json_match = _re.search(r'Frappe response:\s*(\{.*)', raw, _re.S)
+    if frappe_json_match:
+        try:
+            payload = json.loads(frappe_json_match.group(1))
+            exc_type = payload.get("exc_type", "")
+            message = ""
+
+            server_msgs = payload.get("_server_messages", "")
+            if server_msgs:
+                try:
+                    msgs = json.loads(server_msgs)
+                    if isinstance(msgs, list) and msgs:
+                        first = json.loads(msgs[0]) if isinstance(msgs[0], str) else msgs[0]
+                        message = first.get("message", "") if isinstance(first, dict) else str(first)
+                except (json.JSONDecodeError, IndexError, TypeError):
+                    pass
+
+            if not message:
+                raw_message = payload.get("message", "")
+                if isinstance(raw_message, dict):
+                    message = raw_message.get("message", "") or str(raw_message)
+                elif isinstance(raw_message, str):
+                    message = raw_message
+
+            if message:
+                if exc_type == "LinkValidationError":
+                    return f"I couldn't process your request: {message}. Please verify the value exists in the system and try again."
+                if exc_type == "ValidationError":
+                    return f"The ERP Support API rejected the request: {message}"
+                if exc_type == "MandatoryError":
+                    return f"Some required information is missing: {message}. Please provide all necessary details."
+                if exc_type == "PermissionError":
+                    return f"You don't have permission to perform this action. {message}"
+                return f"I ran into an issue: {message}"
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    cleaned = _re.sub(r'AXON auth debug:\s*\{[^}]*\}\.?\s*', '', raw)
+    cleaned = _re.sub(r'Frappe response:\s*\{.*', '', cleaned, flags=_re.S)
+    cleaned = _re.sub(r'\d+ Client Error:\s*\w+ for url:\s*\S+\.\s*', '', cleaned)
+    cleaned = cleaned.strip().rstrip('.')
+
+    if cleaned:
+        return f"I ran into an issue while processing your request: {cleaned}. Please try again or rephrase your request."
+
+    return "Something went wrong while processing your ERP request. Please try again or contact support."

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -7,6 +7,8 @@ import asyncio
 import sys
 import os
 import re
+import uuid
+from pathlib import Path
 from io import StringIO
 import httpx
 
@@ -20,12 +22,15 @@ from orchestrator.agent import (
     MARKER_FINAL_END,
 )
 
+UPLOADS_DIR = Path("uploads")
+UPLOADS_DIR.mkdir(exist_ok=True)
+
 # Triggering hot-reload to apply HNSW dummy query self-healing fixes
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -87,6 +92,7 @@ class QueryRequest(BaseModel):
     message: Optional[str] = None
     content: Optional[str] = None
     text: Optional[str] = None
+    session_id: Optional[str] = None
     timeout: Optional[int] = DEFAULT_TIMEOUT
 
     def normalized_query(self) -> str:
@@ -120,7 +126,7 @@ async def query_api(req: QueryRequest, request: Request):
     if not question:
         raise HTTPException(status_code=400, detail="`query` must be a non-empty string.")
 
-    result = await run_agent(question, frappe_headers_from_request(request))
+    result = await run_agent(question, frappe_headers_from_request(request), req.session_id)
     return {"response": result}
 
 
@@ -316,7 +322,8 @@ async def stream_query(request: Request):
         current_section = None
 
         try:
-            task = asyncio.create_task(run_agent(question, frappe_headers_from_request(request)))
+            session_id = body.get("session_id")
+            task = asyncio.create_task(run_agent(question, frappe_headers_from_request(request), session_id))
 
             # Compile regex for markers
             markers = [
@@ -432,3 +439,48 @@ async def stream_query(request: Request):
         event_generator(),
         media_type="text/event-stream"
     )
+
+
+@app.get("/v1/tools")
+def tools_list():
+    """List available tools."""
+    from orchestrator.tool_dispatcher import TOOL_ENDPOINTS
+    from orchestrator.mcp_registry import MCP_REGISTRY
+    tools = [
+        {"name": name, "description": f"Endpoint: {url}"}
+        for name, url in TOOL_ENDPOINTS.items()
+    ]
+    tools.extend(
+        {
+            "name": tool.name,
+            "description": tool.description,
+            "method": tool.method,
+            "http_method": tool.http_method,
+        }
+        for tool in MCP_REGISTRY.values()
+    )
+    return {"tools": tools}
+
+
+@app.post("/v1/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """File upload endpoint."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Missing filename.")
+
+    upload_id = str(uuid.uuid4())
+    dest_dir = UPLOADS_DIR / upload_id
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_path = dest_dir / Path(file.filename).name
+
+    try:
+        contents = await file.read()
+        with dest_path.open("wb") as f:
+            f.write(contents)
+
+        return {
+            "upload_id": upload_id,
+            "filepath": str(dest_path.resolve())
+        }
+    except Exception as e:
+        raise HTTPException(status_code=505, detail=f"Failed to save file: {e}")

@@ -7,7 +7,7 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.abspath(os.path.join(BASE_DIR, "..", "chroma_langchain_db_user"))
+DB_PATH = os.path.abspath(os.path.join(BASE_DIR, "..", "chroma_langchain_db_user_local"))
 DATASET_PATH = os.path.abspath(os.path.join(BASE_DIR, "..", "dataset.json"))
 
 COLLECTION_NAME = "agnikul_data"

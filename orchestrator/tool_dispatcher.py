@@ -1,6 +1,7 @@
 import requests
 import logging
 import re
+import asyncio
 
 logging.basicConfig(level=logging.INFO)
 
@@ -25,7 +26,7 @@ async def dispatch_tool(query: str):
     logging.info(f"[TOOL DISPATCH] Tool={tool}, URL={url}, Q={clean_q}")
 
     try:
-        response = requests.get(url, params={"q": clean_q}, timeout=50)
+        response = await asyncio.to_thread(requests.get, url, params={"q": clean_q}, timeout=50)
         response.raise_for_status()
 
         if tool == "arxiv":
@@ -62,7 +63,7 @@ def _clean_query(query: str, tool: str) -> str:
 
     if tool == "arxiv":
         q = q.lower()
-        q = re.sub(r"\b(search|find|look up|lookup|show|papers?|research|citation|doi|arxiv)\b", " ", q)
+        q = re.sub(r"\b(search|find|look up|lookup|show|papers?|research|citation|doi|arxiv|recent|latest|new|current|modern)\b", " ", q)
         q = re.sub(r"\b(for|about|on|page|summary)\b", " ", q)
         q = re.sub(r"\s+", " ", q).strip()
         return q or query

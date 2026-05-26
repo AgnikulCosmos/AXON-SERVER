@@ -22,12 +22,17 @@ def _call(method: str, http_method: str, arguments: dict) -> dict:
 
 
 def create_erp_ticket(**kwargs: Any) -> dict:
+    # Ensure app_name is properly normalized before sending to Frappe
+    app_name = kwargs.get("app_name")
+    if app_name:
+        # The app_name should already be validated by _require()
+        kwargs["app_name"] = app_name
+    
     return _call(
         "erp_support.put_api.create",
         "POST",
         {**kwargs, "req_type": "ticket"},
     )
-
 
 def create_erp_feedback(**kwargs: Any) -> dict:
     return _call(
@@ -70,6 +75,23 @@ def list_erp_tickets(
     }
     return _call(
         "erp_support.get_api.get_tickets",
+        "GET",
+        {key: value for key, value in args.items() if value is not None},
+    )
+
+
+def list_erp_apps(
+    start: int = 0,
+    limit: int = 100,
+    query: str | None = None,
+) -> dict:
+    args = {
+        "start": start,
+        "limit": limit,
+        "query": query,
+    }
+    return _call(
+        "erp_support.get_api.get_apps",
         "GET",
         {key: value for key, value in args.items() if value is not None},
     )
@@ -120,8 +142,8 @@ def list_erp_suggestions(
 
 
 MCP_REGISTRY: dict[str, MCPTool] = {
-    "erp_ticket_create": MCPTool(
-        name="erp_ticket_create",
+    "erp_tickets_create": MCPTool(
+        name="erp_tickets_create",
         description="Create an ERP Support ticket for the logged-in user.",
         method="erp_support.put_api.create",
         http_method="POST",
@@ -155,6 +177,13 @@ MCP_REGISTRY: dict[str, MCPTool] = {
         http_method="GET",
         handler=list_erp_tickets,
     ),
+    "erp_apps_list": MCPTool(
+        name="erp_apps_list",
+        description="List ERP Support applications that can be used as app_name when creating tickets, feedback, or suggestions.",
+        method="erp_support.get_api.get_apps",
+        http_method="GET",
+        handler=list_erp_apps,
+    ),
     "erp_feedback_list": MCPTool(
         name="erp_feedback_list",
         description="List ERP feedback/reviews visible to the logged-in user.",
@@ -171,9 +200,13 @@ MCP_REGISTRY: dict[str, MCPTool] = {
     ),
 }
 
+MCP_ALIASES = {
+    "erp_ticket_create": "erp_tickets_create",
+}
+
 
 def get_mcp_tool(name: str) -> MCPTool:
-    return MCP_REGISTRY[name]
+    return MCP_REGISTRY[MCP_ALIASES.get(name, name)]
 
 
 def _assert_record_visible(docname: str) -> None:

@@ -3,6 +3,9 @@ from common.safety import contains_profanity
 from common.greeting import get_greeting_response, is_greeting
 from orchestrator.planning.semantic_router import SemanticRouter
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 router_llm = ChatOllama(
     model="qwen2.5:0.5b",
@@ -163,67 +166,63 @@ INTENT_TO_ROUTE = {
 async def route_query(query: str) -> str:
     # Check profanity first
     if contains_profanity(query):
-        # print("ROUTE DECIDED: PROFANITY")
         return "PROFANITY"
     
-    # Check greeting before LLM router (saves an LLM call to the router, but calls LLM for generation)
+    # Check greeting before LLM router
     if is_greeting(query):
-        # Keep simple greetings deterministic and independent of model availability.
         return f"GREETING_RESPONSE:{get_greeting_response()}"
 
     query_lower = query.lower()
 
-    # Explicit tool-driven requests
-    wiki_keywords = ["wiki", "wikipedia"]
-    arxiv_keywords = ["arxiv", "paper", "research", "citation", "doi", "journal", "conference", "preprint"]
-    company_keywords = [
-        "agnikul", "cosmos", "agnibaan", "agnilet", "agnite", "sorted",
-        "founding", "founded", "chennai", "iit madras", "headquarter",
-        "srinath", "ravichandran", "moin", "satyanarayanan", "chakravarthy", "janardhana", "raju",
+    # 1. Detect ERP ticket creation by keywords
+    ticket_create_keywords = [
+        "raise a", "create a", "lodge a", "submit a",
+        "ticket", "support ticket", "erp ticket",
+        "raise support", "create support"
     ]
-    erp_keywords = [
-        "cad", "dfr", "manufacturing", "instrumentation", "packaging", "quality integration",
-        "meshing", "scale verification", "dfr analysis", "mesh density", "element type",
-        "ansys", "solidworks", "fluent", "thermo-structural", "launch vehicle", "rocket", "engine",
-        "3d print", "3d-print",
-        "po ", "purchase order", "vendor", "leave", "appraisal", "payment request", "sourcing",
-        "dashboard", "approval", "expense", "budget", "invoice",
-        "ticket", "support ticket", "raise support", "erp support", "support record",
-        "feedback", "suggestion", "review", "erp_i_", "view details"
-    ]
+    if any(kw in query_lower for kw in ticket_create_keywords):
+        return "ERP_ROUTE:erp_tickets_create"
 
-    # Agnikul-related queries should return knowledge-base answers from chromaDB.
-    if any(kw in query_lower for kw in company_keywords):
+    # 2. Detect feedback creation by keywords
+    feedback_keywords = ["give feedback", "submit feedback", "review"]
+    if any(kw in query_lower for kw in feedback_keywords):
+        return "ERP_ROUTE:erp_feedback_create"
+
+    # 3. Detect suggestion creation by keywords
+    suggestion_keywords = ["suggestion", "improve", "enhancement"]
+    if any(kw in query_lower for kw in suggestion_keywords):
+        return "ERP_ROUTE:erp_suggestion_create"
+
+    # 4. Detect organization/company related questions
+    organization_keywords = [
+        "agnikul", "cosmos", "agnibaan", "agnilet", "semi-cryo", "sorcerer", "rocket", "engine",
+        "leave", "holiday", "policy", "policies", "hr", "canteen", "founder", "founded", "ceo", "payroll",
+        "salary", "benefits", "employee", "employees", "allowance", "mediclaim", "insurance", "probation",
+        "appraisal", "increment", "office", "work hour", "attendance", "reimbursement", "travel",
+        "vehicle tracking", "fleet management", "food and beverages", "leave type", "leave balance",
+        "work from home", "wfh", "dress code", "working days", "probation period", "sick leave",
+        "casual leave", "maternity leave", "paternity leave", "probationary", "notice period"
+    ]
+    if any(kw in query_lower for kw in organization_keywords):
         return "RAG"
 
-    # Explicit external search requests.
-    if any(kw in query_lower for kw in wiki_keywords):
-        return "TOOLS"
-    if any(kw in query_lower for kw in arxiv_keywords):
-        return "TOOLS"
-
-    # Leave policy / leave type questions are internal knowledge lookups,
-    # not ERP workflow ticket creation.
-    leave_info_triggers = [
-        "leave types",
-        "types of leave",
-        "leave policy",
-        "available leave",
-        "leave available",
-        "what leaves",
-        "available leaves",
-        "type of leave",
-    ]
-    if any(phrase in query_lower for phrase in leave_info_triggers):
-        return "RAG"
-
-    # Query looks like an ERP/internal workflow request.
-    if any(kw in query_lower for kw in erp_keywords):
-        erp_match = erp_semantic_router.match(query)
-        if erp_match:
-            route_name = erp_match["route"]["route_name"]
-            return f"ERP_ROUTE:{route_name}"
-        return "RAG"
-
-    # All other queries should use external search tools via ddgs.
+    # 5. Default fallback is TOOLS (which handles wiki, arxiv, and ddgs fallbacks)
     return "TOOLS"
+
+def _looks_like_erp_ticket_followup(query_lower: str) -> bool:
+    field_prefixes = (
+        "description:",
+        "module:",
+        "priority:",
+        "app_name:",
+        "app:",
+        "feedback:",
+        "helps:",
+        "ratings:",
+    )
+    return (
+        any(query_lower.startswith(prefix) for prefix in field_prefixes)
+        or "describe the issue" in query_lower
+        or ("module:" in query_lower and "description:" in query_lower)
+        or ("priority:" in query_lower and "description:" in query_lower)
+    )
