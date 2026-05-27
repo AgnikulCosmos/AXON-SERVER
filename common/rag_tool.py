@@ -16,7 +16,7 @@ logger = logging.getLogger("orchestrator")
 # LLM for factual summarization
 # -----------------------------
 _summarizer_llm = ChatOllama(
-    model="qwen2.5:0.5b",
+    model="qwen2.5:1.5b",
     temperature=0,
     base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 )

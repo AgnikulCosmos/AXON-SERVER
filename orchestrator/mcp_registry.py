@@ -99,9 +99,9 @@ def list_erp_apps(
 
 def create_lost_found(**kwargs: Any) -> dict:
     return _call(
-        "core.factory.api.post_data",
+        "axon.api.create_lost_found",
         "POST",
-        {**kwargs, "key": "lf_create"},
+        {**kwargs},
     )
 
 

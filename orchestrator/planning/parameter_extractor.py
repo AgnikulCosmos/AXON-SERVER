@@ -27,7 +27,7 @@ OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 # ── LLM for parameter extraction ────────────────────────────────────────────
 _extractor_llm = ChatOllama(
-    model="qwen2.5:0.5b",
+    model="qwen2.5:1.5b",
     base_url=OLLAMA_URL,
     temperature=0,
     streaming=False,
@@ -37,33 +37,61 @@ _extractor_llm = ChatOllama(
 _EXTRACT_PROMPT = """\
 You are a strict parameter extractor for an enterprise ERP system.
 
-Given a user query and a parameter schema, extract ONLY the parameters
-that are clearly present in the query.
+Given a user query and a parameter schema, extract ONLY the parameters that are clearly present in the query.
 
 Rules:
 - Only extract parameters defined in the schema.
 - If a parameter has an enum list, the extracted value MUST be one of those options.
-- If a parameter has a type like "string", "date", "number", "datetime", "boolean",
-  extract the raw value the user mentioned.
-- For dates, return one of the following keywords if mentioned:
-    today, yesterday, tomorrow,
-    this week, last week,
-    this month, last month,
-    this year, last year
-  Or return an ISO date (YYYY-MM-DD) if a specific date is mentioned.
+- If a parameter has a type like "string", "date", "number", "datetime", "boolean", extract the value the user mentioned.
+- For dates, return one of the following keywords if mentioned: today, yesterday, tomorrow, this week, last week, this month, last month, this year, last year. Or return an ISO date (YYYY-MM-DD) if a specific date is mentioned.
 - For booleans, return true or false.
-- If a parameter is NOT mentioned in the query, do NOT include it.
-- Return valid JSON only. No explanation.
+- If a parameter is NOT mentioned in the query, do NOT include it in the JSON.
+- Return valid JSON only. No explanation, no comments, no markdown formatting.
 
-Parameter Schema:
+Few-Shot Examples:
+
+Example 1:
+Query: "I lost my blue access card in the cafeteria today"
+Schema:
+{{
+  "item_name": "string",
+  "lost_location": "string",
+  "lost_date": "date",
+  "lost_description": "string"
+}}
+Output:
+{{
+  "item_name": "Access Card",
+  "lost_location": "cafeteria",
+  "lost_date": "today",
+  "lost_description": "blue access card"
+}}
+
+Example 2:
+Query: "I found a red laptop charger in the conference room yesterday"
+Schema:
+{{
+  "item_name": "string",
+  "found_location": "string",
+  "found_date": "date",
+  "found_description": "string"
+}}
+Output:
+{{
+  "item_name": "Laptop Charger",
+  "found_location": "conference room",
+  "found_date": "yesterday",
+  "found_description": "red laptop charger"
+}}
+
+Now perform the extraction:
+Schema:
 {schema}
 
 User Query:
 {query}
 
-Respond ONLY with a JSON object of extracted parameters.
-Example: {{"meal": "lunch", "date": "today"}}
-If nothing can be extracted, respond with: {{}}
+Respond ONLY with the JSON object of extracted parameters:
 """
 # Cache holder for valid app names from Frappe
 _VALID_APP_NAMES_CACHE = None
@@ -176,6 +204,15 @@ def extract_parameters(query: str, route_config: dict) -> dict:
     if extracted_params.get("module") and extracted_params.get("app_name"):
         if str(extracted_params["module"]).lower() == str(extracted_params["app_name"]).lower():
             del extracted_params["module"]
+
+    # ── Post-processing for Lost and Found ──────────────────────────────
+    route_name = route_config.get("route_name", "")
+    if route_name == "lost_found_create":
+        if "name" in extracted_params:
+            val = str(extracted_params["name"]).strip()
+            if not val.upper().startswith("LF-"):
+                logger.info(f"Discarding invalid reference name: {val!r}")
+                del extracted_params["name"]
 
     logger.debug("Merged extraction result: %s", extracted_params)
     return extracted_params
@@ -412,6 +449,53 @@ def _erp_support_extract(query: str, route_config: dict, schema: dict) -> dict:
                     extracted[field] = value
                     break
 
+    return extracted
+
+
+def _lost_found_extract(query: str, schema: dict) -> dict:
+    """
+    Deterministic fallback for Lost and Found queries to extract item_name,
+    lost_location, and lost_description from standard natural language statements.
+    """
+    extracted = {}
+    q_lower = query.lower()
+    
+    # Only run if lost_found parameters exist
+    if "item_name" not in schema:
+        return {}
+        
+    # Pattern 1: "I lost my <item> in the <location> <date>" or "I lost my <item> in <location>"
+    # e.g., "I lost my access card in the cafeteria today"
+    match1 = re.search(r"\blost my\s+([A-Za-z0-9_& -]+?)\s+in(?: the)?\s+([A-Za-z0-9_& -]+?)(?:\s+(?:today|yesterday|tomorrow|this week|last week)|\.|$)", q_lower)
+    if match1:
+        extracted["item_name"] = match1.group(1).strip()
+        extracted["lost_location"] = match1.group(2).strip()
+        
+    # Pattern 2: "I lost my <item> at <location>"
+    # e.g., "I lost my phone at reception"
+    match2 = re.search(r"\blost my\s+([A-Za-z0-9_& -]+?)\s+at\s+([A-Za-z0-9_& -]+?)(?:\s+(?:today|yesterday|tomorrow)|\.|$)", q_lower)
+    if match2:
+        extracted["item_name"] = match2.group(1).strip()
+        extracted["lost_location"] = match2.group(2).strip()
+        
+    # Pattern 3: "lost <item> in <location>"
+    match3 = re.search(r"\blost\s+([A-Za-z0-9_& -]+?)\s+in\s+([A-Za-z0-9_& -]+?)(?:\s+(?:today|yesterday|tomorrow)|\.|$)", q_lower)
+    if match3 and "item_name" not in extracted:
+        extracted["item_name"] = match3.group(1).strip()
+        extracted["lost_location"] = match3.group(2).strip()
+
+    # Clean up and validate
+    for k in list(extracted.keys()):
+        val = extracted[k]
+        if not val or val.lower() in ["a", "an", "the", "my", "item"]:
+            del extracted[k]
+        else:
+            # Capitalize first letter of item_name for nice display
+            if k == "item_name":
+                extracted[k] = val.title()
+            else:
+                extracted[k] = val
+                
     return extracted
 
 

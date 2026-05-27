@@ -143,6 +143,83 @@ This will show all apps you can use for creating tickets/feedback/suggestions.
 
 ---
 
+## 🛠️ API & Custom DocTypes Developer Guide
+
+Axon's architecture relies on a custom Frappe application layer that persists conversation states via three custom DocTypes. Below is the developer reference for these DocTypes and their associated whitelisted API endpoints.
+
+### 1. Custom DocType Schemas
+
+#### 📝 `AX_Sessions`
+Represents an active, titled conversation thread belonging to a specific user.
+*   `user_id` (Data): Email of the owning employee.
+*   `session_id` (Data - Unique): Generated UUID identifying the session.
+*   `title` (Data): Conversational summary (automatically updated).
+*   `status` (Select): `Active` or `Inactive`.
+*   `chats` (Table): List of individual messages (linked child table of `AX_Chats`).
+
+#### 📝 `AX_Chats` (Child Table)
+Stores each message exchange (User prompt or AI assistant response) inside a session.
+*   `role` (Select): `User` or `Assistant`.
+*   `content` (Long Text): Message text.
+*   `sequence_number` (Int): Sequential counter (1-indexed).
+
+#### 📝 `AX_Tools`
+Registers external tools/APIs dynamically at runtime.
+*   `tool_name` (Data - Unique): Canonical identifier of the tool.
+*   `description` (Text): Semantic description parsed by the router LLM.
+*   `status` (Select): `Active` or `Inactive`.
+
+---
+
+### 2. Whitelisted API Endpoints (`axon.api.*`)
+
+These endpoints are whitelisted on the Frappe frontend app proxy (`apps/axon/axon/api.py`):
+
+| Endpoint Path | HTTP Method | Parameters | Description |
+| :--- | :--- | :--- | :--- |
+| `axon.api.create_session` | POST | `title` (optional) | Creates a new `AX_Sessions` record. |
+| `axon.api.get_session` | GET | `session_id` | Retrieves a session along with its chronologically ordered `AX_Chats` messages. |
+| `axon.api.list_sessions` | GET | `limit`, `offset` | Lists sessions for the currently logged-in user. |
+| `axon.api.add_message` | POST | `session_id`, `role`, `content` | Appends a message to `AX_Chats`. Triggers background title generation on assistant turns. |
+| `axon.api.query_ai` | POST | `session_id`, `query` | Submits a query, persists both turns, and returns the JSON answer. |
+| `axon.api.stream_ai` | POST | `session_id`, `query` | Streams back SSE response chunks from AXON-SERVER. |
+
+---
+
+### 3. Programmatic Interaction Example (Frappe Console / Scripts)
+
+You can interact with these DocTypes and endpoints directly in python:
+
+```python
+import frappe
+
+# 1. Programmatically initialize a session
+session = frappe.get_doc({
+    "doctype": "AX_Sessions",
+    "user_id": "employee@agnikul.in",
+    "session_id": "test-uuid-1234",
+    "title": "Initial Chat Setup",
+    "status": "Active"
+})
+session.insert(ignore_permissions=True)
+
+# 2. Append a user message
+session.append("chats", {
+    "role": "User",
+    "content": "Raise a ticket for Fleet Management.",
+    "sequence_number": 1
+})
+session.save(ignore_permissions=True)
+frappe.db.commit()
+
+# 3. Fetch session with messages
+doc = frappe.get_doc("AX_Sessions", session.name)
+for msg in doc.chats:
+    print(f"[{msg.role}] {msg.content}")
+```
+
+---
+
 ## Error Handling
 
 ### Missing Fields

@@ -44,7 +44,11 @@ def call_frappe(tool_call: dict):
     if http_method == "GET":
         response = requests.get(url, params=arguments, headers=headers, timeout=FRAPPE_TIMEOUT)
     else:
-        response = requests.post(url, json=arguments, headers=headers, timeout=FRAPPE_TIMEOUT)
+        # Suppress the automatic "Expect: 100-continue" header that requests
+        # adds for POST bodies – Werkzeug (Frappe dev server) returns 417
+        # Expectation Failed when it receives that header.
+        post_headers = {**headers, "Expect": ""}
+        response = requests.post(url, json=arguments, headers=post_headers, timeout=FRAPPE_TIMEOUT)
 
     try:
         response.raise_for_status()
@@ -69,13 +73,13 @@ def _ensure_csrf_header(headers: dict) -> bool:
         return False
 
     response = requests.get(
-        f"{FRAPPE_URL}/api/method/frappe.sessions.get_csrf_token",  # ← FIXED
+        f"{FRAPPE_URL}/api/method/axon.api.get_current_user",
         headers={"cookie": cookie},
         timeout=FRAPPE_TIMEOUT,
     )
     response.raise_for_status()
 
-    token = response.json().get("message")  # ← also fix: returns string, not dict
+    token = response.json().get("message", {}).get("csrf_token")
     if token:
         headers["X-Frappe-CSRF-Token"] = token
         return True

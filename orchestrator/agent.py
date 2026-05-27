@@ -61,7 +61,7 @@ async def stream_text_word_by_word(text: str, *, end: str = "\n") -> None:
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 
 llm = ChatOllama(
-    model="qwen2.5:0.5b",
+    model="qwen2.5:1.5b",
     base_url=OLLAMA_BASE_URL,
     temperature=0.3,
     top_p=0.9,
@@ -71,6 +71,7 @@ llm = ChatOllama(
 
 
 # Bind tools to model
+TOOLS = []
 #llm_with_tools = llm.bind_tools(TOOLS)
 ENABLE_TOOLS = False
 if ENABLE_TOOLS:

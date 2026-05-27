@@ -37,17 +37,45 @@ PROFANITY_FALLBACK = (
 TEST_MODE = False
 
 
-async def _get_friendly_missing_fields_message(fields: list[str]) -> str:
+async def _get_friendly_missing_fields_message(fields: list[str], route_name: str | None = None) -> str:
     from orchestrator.erp_support_client import _FIELD_LABELS, _FIELD_HINTS
     
-    is_lost = any("lost" in f for f in fields) or any(f in {"item_name", "lost_description", "lost_location", "lost_date"} for f in fields)
+    # Determine greetings and examples based on route_name
+    example_text = "It is a blue access card, and I lost it in the cafeteria."
     
-    if is_lost:
-        single_greeting = "I'm sorry to hear you've lost your item. Let's get this reported right away so we can track it down. I just need one more detail to proceed:"
-        multi_greeting = "I'm sorry to hear you've lost your item. Let's get this reported right away so we can track it down. Please provide the following details:"
+    if route_name == "lost_found_create":
+        is_lost = any("lost" in f for f in fields) or any(f in {"item_name", "lost_description", "lost_location", "lost_date"} for f in fields)
+        if is_lost:
+            single_greeting = "I'm sorry to hear you've lost your item. Let's get this reported right away so we can track it down. I just need one more detail to proceed:"
+            multi_greeting = "I'm sorry to hear you've lost your item. Let's get this reported right away so we can track it down. Please provide the following details:"
+            example_text = "It is a blue access card, and I lost it in the cafeteria."
+        else:
+            single_greeting = "Thank you for reporting this found item! Let's get this registered in the system. I just need one more detail to proceed:"
+            multi_greeting = "Thank you for reporting this found item! Let's get this registered in the system. Please provide the following details:"
+            example_text = "I found a black keyset on the desk today."
+    elif route_name == "erp_tickets_create":
+        single_greeting = "I'll help you raise a support ticket. I just need one more detail to proceed:"
+        multi_greeting = "I'll help you raise a support ticket. Please provide the following details:"
+        example_text = "I am facing a loading lag issue in Fleet Management."
+    elif route_name == "erp_feedback_create":
+        single_greeting = "Thank you for your feedback! Let's get this registered. I just need one more detail to proceed:"
+        multi_greeting = "Thank you for your feedback! Let's get this registered. Please provide the following details:"
+        example_text = "The Fleet Management dashboard is highly responsive and clean."
+    elif route_name == "erp_suggestion_create":
+        single_greeting = "Thank you for your suggestion to improve the system! Let's get this submitted. I just need one more detail to proceed:"
+        multi_greeting = "Thank you for your suggestion to improve the system! Let's get this submitted. Please provide the following details:"
+        example_text = "Adding a night-mode theme would significantly reduce eye strain."
     else:
-        single_greeting = "Thank you for reporting this found item! Let's get this registered in the system. I just need one more detail to proceed:"
-        multi_greeting = "Thank you for reporting this found item! Let's get this registered in the system. Please provide the following details:"
+        # Fallback to default check
+        is_lost = any("lost" in f for f in fields) or any(f in {"item_name", "lost_description", "lost_location", "lost_date"} for f in fields)
+        if is_lost:
+            single_greeting = "I'm sorry to hear you've lost your item. Let's get this reported right away so we can track it down. I just need one more detail to proceed:"
+            multi_greeting = "I'm sorry to hear you've lost your item. Let's get this reported right away so we can track it down. Please provide the following details:"
+            example_text = "It is a blue access card, and I lost it in the cafeteria."
+        else:
+            single_greeting = "To complete your request, I just need one more detail to proceed:"
+            multi_greeting = "To complete your request, please provide the following details:"
+            example_text = "It is a blue access card, and I lost it in the cafeteria."
     
     # 1. Single missing field
     if len(fields) == 1:
@@ -57,8 +85,8 @@ async def _get_friendly_missing_fields_message(fields: list[str]) -> str:
         hint_text = f" (e.g., *{hint}*)" if hint else ""
         return (
             f"{single_greeting}\n\n"
-            f"• **{label}**{hint_text}\n\n"
-            f"Please copy, fill out, and reply with the template below:\n"
+            f"* **{label}**{hint_text}\n\n"
+            f"You can reply in **plain English** (e.g., \"*{hint}*\") or use the optional template below:\n\n"
             f"```text\n"
             f"{field}: <value>\n"
             f"```"
@@ -66,22 +94,21 @@ async def _get_friendly_missing_fields_message(fields: list[str]) -> str:
     
     # 2. Multiple missing fields
     lines = [
-        f"{multi_greeting}\n"
+        multi_greeting
     ]
     
-    template_lines = []
     for field in fields:
         label = _FIELD_LABELS.get(field, field.replace("_", " "))
         hint = _FIELD_HINTS.get(field, "")
         hint_text = f" — *{hint}*" if hint else ""
+        lines.append(f"* **{label}**{hint_text}")
         
-        lines.append(f"• **{label}**{hint_text}")
-        template_lines.append(f"{field}: <value>")
-        
-    lines.append("\nPlease copy, fill out, and reply with the template below:")
+    template_lines = [f"{field}: <value>" for field in fields]
+    
+    lines.append(f"You can reply naturally in **plain English** (e.g., \"*{example_text}*\") or use the optional template below:")
     lines.append(f"```text\n" + "\n".join(template_lines) + "\n```")
     
-    return "\n".join(lines)
+    return "\n\n".join(lines)
 
 
 async def run_agent(query: str, frappe_headers: dict | None = None, session_id: str | None = None):
@@ -219,25 +246,40 @@ async def _run_agent(query: str, session_id: str | None = None):
                 structured_params[key] = val
 
         # Flexible parameter mapping for common user variations
-        if "description" in structured_params:
-            desc_val = structured_params.pop("description")
-            if "found" in pending_plan.get("route_name", ""):
-                structured_params["found_description"] = desc_val
-            else:
-                structured_params["lost_description"] = desc_val
-        if "item_description" in structured_params:
-            desc_val = structured_params.pop("item_description")
-            if "found" in pending_plan.get("route_name", ""):
-                structured_params["found_description"] = desc_val
-            else:
-                structured_params["lost_description"] = desc_val
+        for desc_key in ["description", "item_description"]:
+            if desc_key in structured_params:
+                desc_val = structured_params.pop(desc_key)
+                if "found" in pending_plan.get("route_name", ""):
+                    structured_params["found_description"] = desc_val
+                else:
+                    structured_params["lost_description"] = desc_val
 
+        # If the user used structured key-value format, use it.
+        # Otherwise, use extract_parameters to run LLM-based intelligent extraction!
         if structured_params:
             new_params = structured_params
-        elif len(missing_fields) == 1:
-            new_params = {missing_fields[0]: query.strip()}
         else:
-            result = await _get_friendly_missing_fields_message(missing_fields)
+            router = SemanticRouter()
+            route_config = next((route for route in router.routes if route.get("route_name") == pending_plan["route_name"]), None)
+            if route_config:
+                from copy import deepcopy
+                temp_config = deepcopy(route_config)
+                # Keep only missing fields in parameters schema so the extractor focuses precisely on them
+                temp_config["parameters"] = {
+                    k: v for k, v in route_config.get("parameters", {}).items()
+                    if k in missing_fields
+                }
+                new_params = extract_parameters(query, temp_config)
+            else:
+                new_params = {}
+
+            # Fallback: if Qwen could not extract anything and there is only 1 missing field,
+            # assume the entire query string is the value for that single missing field.
+            if not new_params and len(missing_fields) == 1:
+                new_params = {missing_fields[0]: query.strip()}
+
+        if not new_params:
+            result = await _get_friendly_missing_fields_message(missing_fields, pending_plan.get("route_name"))
             sys.stdout.write(f"{MARKER_FINAL_START}\n")
             await stream_text_word_by_word(result)
             sys.stdout.write(f"{MARKER_FINAL_END}\n")
@@ -363,20 +405,26 @@ async def _run_agent(query: str, session_id: str | None = None):
                 if session_id:
                     plan["_missing_fields"] = e.fields
                     PENDING_ERP_SESSIONS[session_id] = plan
-                result = await _get_friendly_missing_fields_message(e.fields)
+                result = await _get_friendly_missing_fields_message(e.fields, plan.get("route_name"))
             except ValueError as e:
+                if session_id and session_id in PENDING_ERP_SESSIONS:
+                    del PENDING_ERP_SESSIONS[session_id]
                 result = str(e)
             except Exception as e:
+                if session_id and session_id in PENDING_ERP_SESSIONS:
+                    del PENDING_ERP_SESSIONS[session_id]
                 logger.exception("Error executing ERP support plan:")
                 result = _friendly_erp_error(e)
         else:
             result = "No matching ERP route could be resolved for your query."
 
+        logger.info("Result for ERP route: %s (type: %s)", result, type(result))
+        result_str = str(result)
         sys.stdout.write(f"{MARKER_FINAL_START}\n")
-        await stream_text_word_by_word(result)
+        await stream_text_word_by_word(result_str)
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
         sys.stdout.flush()
-        return result
+        return result_str
 
     if route == "QWEN":
         result = await run_qwen(query)
@@ -390,14 +438,11 @@ async def _run_agent(query: str, session_id: str | None = None):
     if route == "TOOLS":
         tool_name, tool_result = await dispatch_tool(query)
 
-        if tool_name == "arxiv":
-            result = tool_result
-        else:
-            result = await summarize_tool_output(
-                user_query=query,
-                tool_name=tool_name,
-                tool_data=tool_result
-            )
+        result = await summarize_tool_output(
+            user_query=query,
+            tool_name=tool_name,
+            tool_data=tool_result
+        )
 
         sys.stdout.write(f"{MARKER_FINAL_START}\n")
         await stream_text_word_by_word(str(result).strip())

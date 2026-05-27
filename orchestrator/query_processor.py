@@ -86,14 +86,11 @@ async def process_query(
         # ── Tools Route (Wiki, DDGS, arXiv) ──────────────────────────────
         if route == "TOOLS":
             tool_name, tool_result = await dispatch_tool(query)
-            if tool_name == "arxiv":
-                message = tool_result
-            else:
-                message = await summarize_tool_output(
-                    user_query=query,
-                    tool_name=tool_name,
-                    tool_data=tool_result,
-                )
+            message = await summarize_tool_output(
+                user_query=query,
+                tool_name=tool_name,
+                tool_data=tool_result,
+            )
             return {"query_type": "search", "status": "ok", "message": str(message).strip()}
 
         # ── Organization/QWEN Route ──────────────────────────────────────

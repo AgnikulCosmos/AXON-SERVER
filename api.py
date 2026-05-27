@@ -37,7 +37,7 @@ UPLOADS_DIR = Path("uploads")
 UPLOADS_DIR.mkdir(exist_ok=True)
 DEFAULT_TIMEOUT = 1000
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-TITLE_MODEL = "qwen2.5:0.5b"
+TITLE_MODEL = "qwen2.5:1.5b"
 
 
 class QueryRequest(BaseModel):

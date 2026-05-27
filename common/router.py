@@ -8,7 +8,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 router_llm = ChatOllama(
-    model="qwen2.5:0.5b",
+    model="qwen2.5:1.5b",
     base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434"),
     temperature=0,
     format="json"

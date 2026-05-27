@@ -30,7 +30,10 @@ async def dispatch_tool(query: str):
         response.raise_for_status()
 
         if tool == "arxiv":
-            return tool, response.text  
+            try:
+                return tool, response.json()
+            except Exception:
+                return tool, response.text  
 
         return tool, response.json()
 

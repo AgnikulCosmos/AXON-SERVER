@@ -215,6 +215,29 @@ def _missing_fields_message(fields: list[str], extra_context: str = None) -> str
     return "\n".join(lines)
 
 
+def _resolve_single_date(value) -> str:
+    """Resolve a relative date keyword (today, yesterday, tomorrow) or pattern to ISO YYYY-MM-DD."""
+    if not value:
+        return ""
+    val = str(value).strip().lower()
+    from datetime import date, timedelta
+    today = date.today()
+    if val == "today":
+        return today.isoformat()
+    elif val == "yesterday":
+        return (today - timedelta(days=1)).isoformat()
+    elif val == "tomorrow":
+        return (today + timedelta(days=1)).isoformat()
+    
+    # Try ISO date pattern
+    import re
+    match = re.search(r"\d{4}-\d{2}-\d{2}", val)
+    if match:
+        return match.group()
+        
+    return val
+
+
 def execute_erp_support_plan(plan: dict) -> dict:
     route_name = plan.get("route_name")
     params = dict(plan.get("parameters") or {})
@@ -224,11 +247,13 @@ def execute_erp_support_plan(plan: dict) -> dict:
         status = params.get("status") or "Pending"
         if status == "Found" or "name" in params:
             payload = _require(params, ["name", "found_location", "found_date", "found_description"])
+            payload["found_date"] = _resolve_single_date(payload["found_date"])
             payload.update({
                 "status": "Found"
             })
         else:
             payload = _require(params, ["item_name", "lost_location", "lost_date", "lost_description"])
+            payload["lost_date"] = _resolve_single_date(payload["lost_date"])
             payload.update({
                 "status": "Pending",
                 "upload_image": params.get("upload_image") or ""
@@ -264,6 +289,10 @@ def execute_erp_support_plan(plan: dict) -> dict:
 def format_erp_support_response(plan: dict, response: dict) -> str:
     data = response.get("message", response) if isinstance(response, dict) else response
 
+    # Gracefully unwrap nested 'message' if it exists as a dict (common in Frappe whitelist responses)
+    if isinstance(data, dict) and "message" in data and isinstance(data["message"], dict):
+        data = data["message"]
+
     if plan.get("route_name") == "erp_support_view_details":
         if isinstance(data, dict) and data.get("status") == "success":
             details = data.get("data") or {}
@@ -290,9 +319,14 @@ def format_erp_support_response(plan: dict, response: dict) -> str:
 
 def _ticket_payload(params: dict) -> dict:
     payload = _require(params, ["app_name", "priority", "module", "description"])
+    issue_dt = params.get("issue_dt")
+    if issue_dt:
+        issue_dt = _resolve_single_date(issue_dt)
+    else:
+        issue_dt = date.today().isoformat()
     payload.update({
         "status": params.get("status") or "Yet To Start",
-        "issue_dt": params.get("issue_dt") or date.today().isoformat(),
+        "issue_dt": issue_dt,
     })
     _copy_optional(payload, params, ["attachments", "roles"])
     return payload

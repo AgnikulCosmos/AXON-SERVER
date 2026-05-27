@@ -42,7 +42,7 @@ async def startup_event():
     logger = logging.getLogger("orchestrator")
     logger.info("FastAPI startup: Bootstrapping Ollama models...")
     
-    models_to_pull = ["mxbai-embed-large", "qwen2.5:0.5b"]
+    models_to_pull = ["mxbai-embed-large", "qwen2.5:1.5b"]
     for model in models_to_pull:
         try:
             logger.info(f"Ensuring Ollama model '{model}' is pulled...")
@@ -84,7 +84,7 @@ from typing import Optional
 
 DEFAULT_TIMEOUT = 1000
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-TITLE_MODEL = "qwen2.5:0.5b"
+TITLE_MODEL = "qwen2.5:1.5b"
 
 class QueryRequest(BaseModel):
     query: Optional[str] = None
