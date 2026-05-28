@@ -177,34 +177,53 @@ async def route_query(query: str) -> str:
     # Bypasses ERP ticket/feedback/suggestion creation checks for leave queries
     is_leave_query = any(kw in query_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday"])
 
-    # Detect Lost and Found creation/reporting
-    lost_create_keywords = ["lost my", "lost a", "report a lost", "record a lost", "report lost", "record lost", "lost item"]
-    found_create_keywords = ["found a", "found my", "mark as found", "mark found", "mark erp lost as found"]
-    
-    if any(kw in query_lower for kw in lost_create_keywords) or any(kw in query_lower for kw in found_create_keywords) or ("mark " in query_lower and " as found" in query_lower):
-        return "ERP_ROUTE:lost_found_create"
-        
-    lost_list_keywords = ["list lost", "show lost", "view lost", "lost items", "lost ones", "lost and found"]
+    # 1. Detect Lost and Found listing first
+    lost_list_keywords = [
+        "list lost", "show lost", "view lost", "lost items", "lost ones", "lost and found",
+        "list found", "show found", "view found", "found items", "found ones"
+    ]
     if any(kw in query_lower for kw in lost_list_keywords):
         return "ERP_ROUTE:lost_found_list"
 
+    # 2. Detect Lost and Found creation/reporting
+    lost_create_keywords = ["lost my", "lost a", "report a lost", "record a lost", "report lost", "record lost", "lost item"]
+    found_create_keywords = ["found a", "found my", "mark as found", "mark found", "mark erp lost as found", "i found", "found lf-"]
+    
+    has_found_ref = (
+        any(kw in query_lower for kw in found_create_keywords) or 
+        ("mark " in query_lower and " as found" in query_lower) or
+        ("found" in query_lower and "lf-" in query_lower)
+    )
+    if any(kw in query_lower for kw in lost_create_keywords) or has_found_ref:
+        return "ERP_ROUTE:lost_found_create"
+
+    # Detect ERP ticket listing
+    ticket_list_keywords = ["list tickets", "show tickets", "view tickets", "my tickets", "my support tickets", "list my tickets", "show my tickets", "view my tickets", "get tickets", "ticket status", "status of my tickets"]
+    if not is_leave_query and any(kw in query_lower for kw in ticket_list_keywords):
+        return "ERP_ROUTE:erp_tickets_list"
+
     # 1. Detect ERP ticket creation by keywords
     ticket_create_keywords = [
-        "raise a", "create a", "lodge a", "submit a",
         "ticket", "support ticket", "erp ticket",
-        "raise support", "create support"
+        "raise support", "create support", "support request",
+        "raise a ticket", "create a ticket", "submit a ticket", "lodge a ticket", "open a ticket",
+        "raise an erp ticket", "create an erp ticket"
     ]
     if not is_leave_query and any(kw in query_lower for kw in ticket_create_keywords):
         return "ERP_ROUTE:erp_tickets_create"
 
     # 2. Detect feedback creation by keywords
-    feedback_keywords = ["give feedback", "submit feedback", "review"]
-    if not is_leave_query and any(kw in query_lower for kw in feedback_keywords):
+    feedback_verbs = ["give", "submit", "create", "leave", "post", "add", "provide", "write", "send"]
+    feedback_action = any(verb in query_lower for verb in feedback_verbs) and "feedback" in query_lower
+    feedback_keywords = ["give feedback", "submit feedback", "create feedback", "create a feedback", "leave feedback", "leave a feedback", "post feedback", "review"]
+    if not is_leave_query and (feedback_action or any(kw in query_lower for kw in feedback_keywords)):
         return "ERP_ROUTE:erp_feedback_create"
 
     # 3. Detect suggestion creation by keywords
-    suggestion_keywords = ["suggestion", "improve", "enhancement"]
-    if not is_leave_query and any(kw in query_lower for kw in suggestion_keywords):
+    suggestion_verbs = ["give", "submit", "create", "leave", "post", "add", "provide", "write", "send"]
+    suggestion_action = any(verb in query_lower for verb in suggestion_verbs) and "suggestion" in query_lower
+    suggestion_keywords = ["suggestion", "improve", "enhancement", "create suggestion", "create a suggestion", "submit suggestion", "submit a suggestion", "give suggestion", "give a suggestion", "leave suggestion", "leave a suggestion"]
+    if not is_leave_query and (suggestion_action or any(kw in query_lower for kw in suggestion_keywords)):
         return "ERP_ROUTE:erp_suggestion_create"
 
     # 4. Detect organization/company related questions

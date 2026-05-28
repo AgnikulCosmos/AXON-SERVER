@@ -173,6 +173,18 @@ def extract_parameters(query: str, route_config: dict) -> dict:
     if not params_schema:
         return {}
 
+    # Dynamic schema filtering for lost_found_create to avoid parameter confusion
+    if route_config.get("route_name") == "lost_found_create":
+        q_lower = query.lower()
+        if "found" in q_lower:
+            # Found report update flow
+            allowed = ["name", "status", "found_location", "found_date", "found_description"]
+            params_schema = {k: v for k, v in params_schema.items() if k in allowed}
+        else:
+            # Lost report creation flow
+            allowed = ["item_name", "lost_location", "lost_date", "lost_description", "status"]
+            params_schema = {k: v for k, v in params_schema.items() if k in allowed}
+
     extracted_params: dict = {}
 
     # ── 1. LLM extraction ───────────────────────────────────────────────
@@ -186,7 +198,28 @@ def extract_parameters(query: str, route_config: dict) -> dict:
                 k: v for k, v in extracted_params.items()
                 if not _is_schema_placeholder(v)
             }
-            logger.debug("LLM extraction result (after placeholder strip): %s", extracted_params)
+            
+            # Validate extracted app_name to make sure it was actually mentioned in the query
+            if "app_name" in extracted_params:
+                app_val = str(extracted_params["app_name"])
+                app_val_lower = app_val.lower().strip()
+                query_lower = query.lower()
+                
+                mentioned = app_val_lower in query_lower
+                if not mentioned:
+                    # Look up aliases in APP_NAME_MAPPING
+                    for canonical, aliases in APP_NAME_MAPPING.items():
+                        if canonical.lower() == app_val_lower or any(alias.lower() == app_val_lower for alias in aliases):
+                            if canonical.lower() in query_lower or any(alias.lower() in query_lower for alias in aliases):
+                                mentioned = True
+                                extracted_params["app_name"] = canonical
+                                break
+                
+                if not mentioned:
+                    logger.info(f"Discarding hallucinated/defaulted app_name: {app_val}")
+                    del extracted_params["app_name"]
+            
+            logger.debug("LLM extraction result (after placeholder strip and validation): %s", extracted_params)
     except Exception as exc:
         logger.warning("LLM parameter extraction failed: %s — using fallback", exc)
 

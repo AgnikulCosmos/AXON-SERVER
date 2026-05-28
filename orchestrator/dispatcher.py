@@ -187,11 +187,21 @@ def _is_erp_ticket_creation_query(query: str) -> bool:
     return has_creation_verb and has_ticket_ref and not is_unrelated_creation
 
 
+def _is_erp_ticket_list_query(query: str) -> bool:
+    """Detect if the query is for listing/showing ERP support tickets."""
+    q_lower = query.lower()
+    ticket_list_keywords = ["list tickets", "show tickets", "view tickets", "my tickets", "my support tickets", "list my tickets", "show my tickets", "view my tickets", "get tickets", "ticket status", "status of my tickets"]
+    is_unrelated = any(kw in q_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday"])
+    return any(kw in q_lower for kw in ticket_list_keywords) and not is_unrelated
+
+
 def _is_erp_feedback_creation_query(query: str) -> bool:
     """Detect if the query is for creating ERP feedback/review."""
     q_lower = query.lower()
-    feedback_keywords = ["give feedback", "submit feedback", "review", "rate", "rating"]
-    has_feedback_ref = any(kw in q_lower for kw in feedback_keywords)
+    feedback_verbs = ["give", "submit", "create", "leave", "post", "add", "provide", "write", "send"]
+    feedback_action = any(verb in q_lower for verb in feedback_verbs) and "feedback" in q_lower
+    feedback_keywords = ["give feedback", "submit feedback", "create feedback", "create a feedback", "leave feedback", "leave a feedback", "post feedback", "review", "rate", "rating"]
+    has_feedback_ref = feedback_action or any(kw in q_lower for kw in feedback_keywords)
     is_unrelated = any(kw in q_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday", "checkin", "check-out", "checkout", "check-in", "payroll", "lost", "found"])
     return has_feedback_ref and not is_unrelated
 
@@ -199,8 +209,10 @@ def _is_erp_feedback_creation_query(query: str) -> bool:
 def _is_erp_suggestion_creation_query(query: str) -> bool:
     """Detect if the query is for creating ERP suggestion."""
     q_lower = query.lower()
-    suggestion_keywords = ["suggestion", "improve", "enhancement", "feature request"]
-    has_suggestion_ref = any(kw in q_lower for kw in suggestion_keywords)
+    suggestion_verbs = ["give", "submit", "create", "leave", "post", "add", "provide", "write", "send"]
+    suggestion_action = any(verb in q_lower for verb in suggestion_verbs) and "suggestion" in q_lower
+    suggestion_keywords = ["suggestion", "improve", "enhancement", "feature request", "create suggestion", "create a suggestion", "submit suggestion", "submit a suggestion", "give suggestion", "give a suggestion", "leave suggestion", "leave a suggestion"]
+    has_suggestion_ref = suggestion_action or any(kw in q_lower for kw in suggestion_keywords)
     is_unrelated = any(kw in q_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday", "checkin", "check-out", "checkout", "check-in", "payroll", "lost", "found"])
     return has_suggestion_ref and not is_unrelated
 
@@ -208,12 +220,20 @@ def _is_erp_suggestion_creation_query(query: str) -> bool:
 def _is_lost_found_create_query(query: str) -> bool:
     q_lower = query.lower()
     lost_create_keywords = ["lost my", "lost a", "report a lost", "record a lost", "report lost", "record lost", "lost item"]
-    found_create_keywords = ["found a", "found my", "mark as found", "mark found", "mark erp lost as found"]
-    return any(kw in q_lower for kw in lost_create_keywords) or any(kw in q_lower for kw in found_create_keywords) or ("mark " in q_lower and " as found" in q_lower)
+    found_create_keywords = ["found a", "found my", "mark as found", "mark found", "mark erp lost as found", "i found", "found lf-"]
+    has_found_ref = (
+        any(kw in q_lower for kw in found_create_keywords) or 
+        ("mark " in q_lower and " as found" in q_lower) or
+        ("found" in q_lower and "lf-" in q_lower)
+    )
+    return any(kw in q_lower for kw in lost_create_keywords) or has_found_ref
 
 def _is_lost_found_list_query(query: str) -> bool:
     q_lower = query.lower()
-    lost_list_keywords = ["list lost", "show lost", "view lost", "lost items", "lost ones", "lost and found"]
+    lost_list_keywords = [
+        "list lost", "show lost", "view lost", "lost items", "lost ones", "lost and found",
+        "list found", "show found", "view found", "found items", "found ones"
+    ]
     return any(kw in q_lower for kw in lost_list_keywords)
 
 
@@ -222,6 +242,16 @@ async def _run_agent(query: str, session_id: str | None = None):
     logger.debug(f"[Session Tracking] Query: {query!r}, session_id: {session_id!r}, in_pending: {session_id in PENDING_ERP_SESSIONS if session_id else False}")
 
     # ── Check for pending ERP session ──────────────────────────────
+    if session_id and session_id in PENDING_ERP_SESSIONS:
+        # Check if the user is explicitly switching to a different ERP intent
+        new_route = await route_query(query)
+        if new_route and new_route.startswith("ERP_ROUTE:"):
+            matched_route_name = new_route.split(":", 1)[1]
+            pending_plan = PENDING_ERP_SESSIONS[session_id]
+            if matched_route_name != pending_plan.get("route_name"):
+                logger.info(f"User switched intent from {pending_plan.get('route_name')} to {matched_route_name}. Discarding pending session.")
+                del PENDING_ERP_SESSIONS[session_id]
+
     if session_id and session_id in PENDING_ERP_SESSIONS:
         if q in ["cancel", "stop", "abort", "nevermind", "quit", "exit"]:
             del PENDING_ERP_SESSIONS[session_id]
@@ -253,6 +283,12 @@ async def _run_agent(query: str, session_id: str | None = None):
                     structured_params["found_description"] = desc_val
                 else:
                     structured_params["lost_description"] = desc_val
+
+        if "app" in structured_params:
+            structured_params["app_name"] = structured_params.pop("app")
+
+        if "rating" in structured_params:
+            structured_params["ratings"] = structured_params.pop("rating")
 
         # If the user used structured key-value format, use it.
         # Otherwise, use extract_parameters to run LLM-based intelligent extraction!
@@ -302,13 +338,16 @@ async def _run_agent(query: str, session_id: str | None = None):
         route = f"ERP_ROUTE:{pending_plan['route_name']}"
         plan = pending_plan
     else:
-        # ── First, check for ERP creation queries directly ──────────
-        if _is_lost_found_create_query(query):
-            route = "ERP_ROUTE:lost_found_create"
-            plan = _build_erp_plan("lost_found_create", query)
-        elif _is_lost_found_list_query(query):
+        # ── First, check for ERP listing queries directly ──────────
+        if _is_lost_found_list_query(query):
             route = "ERP_ROUTE:lost_found_list"
             plan = _build_erp_plan("lost_found_list", query)
+        elif _is_lost_found_create_query(query):
+            route = "ERP_ROUTE:lost_found_create"
+            plan = _build_erp_plan("lost_found_create", query)
+        elif _is_erp_ticket_list_query(query):
+            route = "ERP_ROUTE:erp_tickets_list"
+            plan = _build_erp_plan("erp_tickets_list", query)
         elif _is_erp_ticket_creation_query(query):
             route = "ERP_ROUTE:erp_tickets_create"
             plan = _build_erp_plan("erp_tickets_create", query)
@@ -427,10 +466,11 @@ async def _run_agent(query: str, session_id: str | None = None):
         return result_str
 
     if route == "QWEN":
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        sys.stdout.flush()
+
         result = await run_qwen(query)
 
-        sys.stdout.write(f"{MARKER_FINAL_START}\n")
-        await stream_text_word_by_word(result)
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
         sys.stdout.flush()
         return result
@@ -438,14 +478,15 @@ async def _run_agent(query: str, session_id: str | None = None):
     if route == "TOOLS":
         tool_name, tool_result = await dispatch_tool(query)
 
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        sys.stdout.flush()
+
         result = await summarize_tool_output(
             user_query=query,
             tool_name=tool_name,
             tool_data=tool_result
         )
 
-        sys.stdout.write(f"{MARKER_FINAL_START}\n")
-        await stream_text_word_by_word(str(result).strip())
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
         sys.stdout.flush()
         return result

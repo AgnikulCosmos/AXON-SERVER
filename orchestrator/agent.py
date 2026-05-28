@@ -37,7 +37,7 @@ async def stream_text_word_by_word(text: str, *, end: str = "\n") -> None:
         if tok == "":
             continue
 
-        sys.stdout.write(tok)
+        sys.stdout.write(tok.replace("\n", "<br/>"))
         sys.stdout.flush()
 
         # Only delay after non-whitespace tokens, so newlines are instant
@@ -45,7 +45,7 @@ async def stream_text_word_by_word(text: str, *, end: str = "\n") -> None:
             await asyncio.sleep(WORD_STREAM_DELAY)
 
     if end:
-        sys.stdout.write(end)
+        sys.stdout.write(end.replace("\n", "<br/>"))
         sys.stdout.flush()
 
 

@@ -282,7 +282,7 @@ Output Rules:
 
 def clean_line(line: str) -> str:
     line = re.sub(r'^\s*event:\s*', '', line)
-    return line.replace("\x00", "").replace("\r", "").strip()
+    return line.replace("\x00", "").replace("\r", "")
 
 
 def sse_event(data: str, event_type: str | None = None) -> str:
