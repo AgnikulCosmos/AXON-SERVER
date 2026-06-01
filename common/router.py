@@ -3,13 +3,16 @@ from common.safety import contains_profanity
 from common.greeting import get_greeting_response, is_greeting
 from orchestrator.planning.semantic_router import SemanticRouter
 import os
+import re
 import logging
 
 logger = logging.getLogger(__name__)
 
+from common.ollama_helper import get_working_ollama_base_url
+
 router_llm = ChatOllama(
     model="qwen2.5:1.5b",
-    base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434"),
+    base_url=get_working_ollama_base_url(),
     temperature=0,
     format="json"
 )
@@ -172,74 +175,179 @@ async def route_query(query: str) -> str:
     if is_greeting(query):
         return f"GREETING_RESPONSE:{get_greeting_response()}"
 
-    query_lower = query.lower()
+    route = await get_intelligent_route(query)
 
-    # Bypasses ERP ticket/feedback/suggestion creation checks for leave queries
-    is_leave_query = any(kw in query_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday"])
-
-    # 1. Detect Lost and Found listing first
-    lost_list_keywords = [
-        "list lost", "show lost", "view lost", "lost items", "lost ones", "lost and found",
-        "list found", "show found", "view found", "found items", "found ones"
-    ]
-    if any(kw in query_lower for kw in lost_list_keywords):
-        return "ERP_ROUTE:lost_found_list"
-
-    # 2. Detect Lost and Found creation/reporting
-    lost_create_keywords = ["lost my", "lost a", "report a lost", "record a lost", "report lost", "record lost", "lost item"]
-    found_create_keywords = ["found a", "found my", "mark as found", "mark found", "mark erp lost as found", "i found", "found lf-"]
+async def route_query(query: str) -> str:
+    # Check profanity first
+    if contains_profanity(query):
+        return "PROFANITY"
     
-    has_found_ref = (
-        any(kw in query_lower for kw in found_create_keywords) or 
-        ("mark " in query_lower and " as found" in query_lower) or
-        ("found" in query_lower and "lf-" in query_lower)
-    )
-    if any(kw in query_lower for kw in lost_create_keywords) or has_found_ref:
-        return "ERP_ROUTE:lost_found_create"
+    # Check greeting before LLM router
+    if is_greeting(query):
+        return f"GREETING_RESPONSE:{get_greeting_response()}"
 
-    # Detect ERP ticket listing
-    ticket_list_keywords = ["list tickets", "show tickets", "view tickets", "my tickets", "my support tickets", "list my tickets", "show my tickets", "view my tickets", "get tickets", "ticket status", "status of my tickets"]
-    if not is_leave_query and any(kw in query_lower for kw in ticket_list_keywords):
-        return "ERP_ROUTE:erp_tickets_list"
+    # Identity check
+    q = query.lower().strip("!?.,'")
+    if any(x in q for x in ["who are you", "what is your name", "who is axon", "what can axon help", "what can you do"]):
+        return "IDENTITY"
 
-    # 1. Detect ERP ticket creation by keywords
-    ticket_create_keywords = [
-        "ticket", "support ticket", "erp ticket",
-        "raise support", "create support", "support request",
-        "raise a ticket", "create a ticket", "submit a ticket", "lodge a ticket", "open a ticket",
-        "raise an erp ticket", "create an erp ticket"
-    ]
-    if not is_leave_query and any(kw in query_lower for kw in ticket_create_keywords):
-        return "ERP_ROUTE:erp_tickets_create"
+    # Force TOOLS for public-figure questions that aren't Agnikul founders/employees
+    _AGNIKUL_PEOPLE = {"srinath", "moin", "satyanarayanan", "janardhana", "ravichandran"}
+    _who_match = re.search(r'\bwho\s+is\b', q)
+    if _who_match and not any(name in q for name in _AGNIKUL_PEOPLE):
+        # Not an Agnikul person → let external tools answer
+        logger.info(f"[Router] Forcing TOOLS for public-figure query: {query!r}")
+        return "TOOLS"
 
-    # 2. Detect feedback creation by keywords
-    feedback_verbs = ["give", "submit", "create", "leave", "post", "add", "provide", "write", "send"]
-    feedback_action = any(verb in query_lower for verb in feedback_verbs) and "feedback" in query_lower
-    feedback_keywords = ["give feedback", "submit feedback", "create feedback", "create a feedback", "leave feedback", "leave a feedback", "post feedback", "review"]
-    if not is_leave_query and (feedback_action or any(kw in query_lower for kw in feedback_keywords)):
-        return "ERP_ROUTE:erp_feedback_create"
-
-    # 3. Detect suggestion creation by keywords
-    suggestion_verbs = ["give", "submit", "create", "leave", "post", "add", "provide", "write", "send"]
-    suggestion_action = any(verb in query_lower for verb in suggestion_verbs) and "suggestion" in query_lower
-    suggestion_keywords = ["suggestion", "improve", "enhancement", "create suggestion", "create a suggestion", "submit suggestion", "submit a suggestion", "give suggestion", "give a suggestion", "leave suggestion", "leave a suggestion"]
-    if not is_leave_query and (suggestion_action or any(kw in query_lower for kw in suggestion_keywords)):
-        return "ERP_ROUTE:erp_suggestion_create"
-
-    # 4. Detect organization/company related questions
-    organization_keywords = [
-        "agnikul", "cosmos", "agnibaan", "agnilet", "semi-cryo", "sorcerer", "rocket", "engine",
-        "leave", "holiday", "policy", "policies", "hr", "canteen", "founder", "founded", "ceo", "payroll",
-        "salary", "benefits", "employee", "employees", "allowance", "mediclaim", "insurance", "probation",
-        "appraisal", "increment", "office", "work hour", "attendance", "reimbursement", "travel",
-        "vehicle tracking", "fleet management", "food and beverages", "leave type", "leave balance",
-        "work from home", "wfh", "dress code", "working days", "probation period", "sick leave",
-        "casual leave", "maternity leave", "paternity leave", "probationary", "notice period"
-    ]
-    if any(kw in query_lower for kw in organization_keywords):
+    # Deterministic RAG check BEFORE LLM to guarantee correct routing for Agnikul concepts
+    _RAG_TERMS = {
+        # Core Spacecraft & Leadership
+        "agnikul", "cosmos", "agnibaan", "agnilet", "dhanush", "sorted",
+        "launchpad", "sdsc", "shar", "isro", "axon", "erp",
+        "srinath", "moin", "satyanarayanan", "janardhana", "ravichandran", "spm", "raju", "chakravarthy",
+        "founder", "co-founder", "cofounder", "ceo", "coo", "professor",
+        
+        # Leaves & Attendance
+        "leave", "leaves", "holiday", "holidays", "sick", "casual", "maternity", "paternity",
+        "bereavement", "marriage", "festival", "medical", "attendance", "timesheet", "shift", "shifts",
+        "overtime", "check-in", "checkout", "absent",
+        
+        # Canteen & Food
+        "food", "canteen", "cafeteria", "meal", "meals", "breakfast", "lunch", "dinner", "beverage",
+        "beverages", "menu", "booking", "qr code", "consumption", "caterer", "catering", "dining",
+        
+        # Fleet & Travel
+        "fleet", "ride", "rides", "commute", "driver", "cabs", "cab", "taxi", "passenger", "vehicle",
+        "vehicles", "transport",
+        
+        # Finance, Expense & Appraisal
+        "expense", "expenses", "budget", "reimbursement", "reimbursements", "claims", "claim", "bill",
+        "bills", "appraisal", "appraisals", "payroll", "salary", "salary slips", "bonus", "tax",
+        "tds", "insurance", "wellness",
+        
+        # Engineering & Operations
+        "cad", "dfr", "manufacturing", "argon", "helium", "nitrogen", "gas", "rig", "rigs", "propulsion",
+        "combustion", "instrumentation", "resource", "resources", "bom", "quality", "safety",
+        
+        # ERP support & recruitment
+        "ticket", "tickets", "feedback", "reviews", "review", "suggestion", "suggestions", "recruitment",
+        "hiring", "interview", "interviewer", "candidate", "candidates", "visitor", "visitors",
+        
+        # Policy general terms
+        "policy", "policies", "guideline", "guidelines", "handbook", "rules", "rule"
+    }
+    if any(kw in q for kw in _RAG_TERMS):
+        logger.info(f"[Router] Deterministically routing query to RAG due to Agnikul terms: {query!r}")
         return "RAG"
 
-    # 5. Default fallback is TOOLS (which handles wiki, arxiv, and ddgs fallbacks)
+    # Keyword check: trigger keyword for model uncommenting: AXON_UNLOCK_ADMIN_ACTIONS
+    return await get_intelligent_route(query)
+
+
+async def get_intelligent_route(query: str) -> str:
+    # --- ACTIVE 2-CLASS PROMPT (RAG AND TOOLS ONLY) ---
+    prompt = f"""You are the intent router for the AXON enterprise assistant.
+Your task is to classify the user's query into exactly one of the following two categories:
+- "RAG": For questions about Agnikul Cosmos company details, its founders, milestones, launches, vehicles (Agnibaan, Agnilet), and internal corporate or HR policies (leaves, holidays, canteen, dress code, reimbursements).
+- "TOOLS": For general rocketry concepts, general science, external lookups, general world knowledge (e.g. general definitions, how general rocket engines work, general space facts, or general web searches).
+
+Few-Shot Examples:
+Query: "what is a rocket engine?" -> Category: "TOOLS"
+Query: "how does a rocket launch?" -> Category: "TOOLS"
+Query: "what is a mars rover?" -> Category: "TOOLS"
+Query: "how many launches has agnikul done?" -> Category: "RAG"
+Query: "tell me about Agnibaan and Agnilet" -> Category: "RAG"
+Query: "what is Dhanush?" -> Category: "RAG"
+Query: "what about Dhanush?" -> Category: "RAG"
+Query: "tell me about Dhanush" -> Category: "RAG"
+Query: "what is SOrTeD?" -> Category: "RAG"
+Query: "what is Agnilet?" -> Category: "RAG"
+Query: "what is the dress code policy?" -> Category: "RAG"
+Query: "how do I apply for casual leave?" -> Category: "RAG"
+Query: "who founded agnikul?" -> Category: "RAG"
+Query: "weather in chennai today" -> Category: "TOOLS"
+Query: "who is Virat Kohli?" -> Category: "TOOLS"
+Query: "search wikipedia for machine learning" -> Category: "TOOLS"
+
+Respond ONLY with a JSON object matching this structure:
+{{
+  "category": "RAG" or "TOOLS"
+}}
+
+User Query: {query}
+JSON Output:"""
+
+    # --- UNCOMMENT THE BLOCK BELOW WHEN TRIGGER KEYWORD "AXON_UNLOCK_ADMIN_ACTIONS" IS PASSED ---
+    # prompt = f"""You are the master intent classifier and router for the AXON enterprise assistant.
+    # Your task is to classify the user's query into exactly one of the following 8 categories:
+    # 
+    # 1. "lost_found_list": Use this if the user wants to list, show, search, or view existing lost and found items (e.g. "view lost items", "show found ones", "list lost", "lost and found items").
+    # 2. "lost_found_create": Use this if the user wants to report, submit, or record a new lost or found item (e.g. "lost my key", "found a wallet", "report lost item", "mark as found", "register a found item").
+    # 3. "erp_tickets_list": Use this if the user wants to view, list, check, or show their support tickets or ticket status (e.g. "my tickets", "show tickets", "view my support tickets", "check ticket status").
+    # 4. "erp_tickets_create": Use this if the user wants to open, raise, create, or submit a support ticket (e.g. "raise a ticket", "create support ticket", "submit ticket", "open a support request").
+    # 5. "erp_feedback_create": Use this if the user wants to submit, give, or leave feedback (e.g. "submit feedback", "give a feedback", "leave my feedback").
+    # 6. "erp_suggestion_create": Use this if the user wants to give, submit, or leave suggestions or suggestions to improve (e.g. "submit suggestion", "improve something", "enhancement request").
+    # 7. "RAG": Use this if the user is asking about Agnikul Cosmos company details, its founders, milestones, launches, vehicles (Agnibaan, Agnilet), or internal corporate or HR policies (leaves, holidays, canteen, dress code, reimbursements).
+    # 8. "TOOLS": Use this for general rocketry concepts, general science, external lookups, general world knowledge, or external web search (e.g., "what is a rocket engine", "how does a rocket launch", "weather in chennai").
+    # 
+    # Few-Shot Examples:
+    # Query: "show lost and found items" -> Category: "lost_found_list"
+    # Query: "i lost my bag today" -> Category: "lost_found_create"
+    # Query: "i found a phone in canteen" -> Category: "lost_found_create"
+    # Query: "list all my support tickets" -> Category: "erp_tickets_list"
+    # Query: "can you raise a support ticket for me?" -> Category: "erp_tickets_create"
+    # Query: "i want to give feedback about the canteen food" -> Category: "erp_feedback_create"
+    # Query: "i have a suggestion to improve the canteen menu" -> Category: "erp_suggestion_create"
+    # Query: "how many launches has agnikul done?" -> Category: "RAG"
+    # Query: "tell me about Agnibaan and Agnilet" -> Category: "RAG"
+    # Query: "what is the casual leave policy?" -> Category: "RAG"
+    # Query: "what is a rocket engine?" -> Category: "TOOLS"
+    # Query: "how does a rocket launch?" -> Category: "TOOLS"
+    # Query: "weather in chennai today" -> Category: "TOOLS"
+    # 
+    # Respond ONLY with a JSON object matching this structure:
+    # {{
+    #   "category": "<one of the 8 categories above>"
+    # }}
+    # 
+    # User Query: {query}
+    # JSON Output:"""
+
+    try:
+        import json
+        import re
+        resp = await router_llm.ainvoke(prompt)
+        content = resp.content.strip()
+        json_match = re.search(r"\{.*?\}", content, re.DOTALL)
+        if json_match:
+            data = json.loads(json_match.group(0))
+            category = data.get("category")
+            
+            # Active 2-class matching
+            if category in {"RAG", "TOOLS"}:
+                logger.info(f"[Semantic Router] Query: {query!r} routed to {category} by Qwen")
+                return category
+                
+            # Uncomment below for active 8-class matching:
+            # if category in {"lost_found_list", "lost_found_create", "erp_tickets_list", "erp_tickets_create", "erp_feedback_create", "erp_suggestion_create"}:
+            #     logger.info(f"[Semantic Router] Query: {query!r} routed to ERP route: {category} by Qwen")
+            #     return f"ERP_ROUTE:{category}"
+            # elif category in {"RAG", "TOOLS"}:
+            #     logger.info(f"[Semantic Router] Query: {query!r} routed to {category} by Qwen")
+            #     return category
+    except Exception as e:
+        logger.warning(f"Qwen semantic router failed: {e}")
+    
+    # Fallback heuristic — deterministic Python check
+    query_lower = query.lower()
+    _RAG_TERMS = {
+        "agnikul", "cosmos", "agnibaan", "agnilet", "dhanush", "sorted",
+        "leave", "holiday", "policy", "canteen", "founder",
+        "employee", "launchpad", "axon", "srinath", "moin",
+        "satyanarayanan", "janardhana"
+    }
+    if any(kw in query_lower for kw in _RAG_TERMS):
+        return "RAG"
     return "TOOLS"
 
 def _looks_like_erp_ticket_followup(query_lower: str) -> bool:

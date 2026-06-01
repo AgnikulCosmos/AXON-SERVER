@@ -48,7 +48,7 @@ async def startup_event():
             logger.info(f"Ensuring Ollama model '{model}' is pulled...")
             async with httpx.AsyncClient(timeout=600.0) as client:
                 resp = await client.post(
-                    f"{OLLAMA_BASE_URL}/api/pull",
+                    f"{OLLAMA_BASE_URL()}/api/pull",
                     json={"name": model, "stream": False}
                 )
                 resp.raise_for_status()
@@ -63,7 +63,7 @@ async def health():
     ollama_status = "unknown"
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
+            resp = await client.get(f"{OLLAMA_BASE_URL()}/api/tags")
             if resp.status_code == 200:
                 ollama_status = "ok"
                 models_data = resp.json().get("models", [])
@@ -83,7 +83,11 @@ async def health():
 from typing import Optional
 
 DEFAULT_TIMEOUT = 1000
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+from common.ollama_helper import get_working_ollama_base_url
+
+def OLLAMA_BASE_URL() -> str:
+    return get_working_ollama_base_url()
+
 TITLE_MODEL = "qwen2.5:1.5b"
 
 class QueryRequest(BaseModel):
@@ -243,7 +247,7 @@ Output Rules:
     try:
         async with httpx.AsyncClient(timeout=req.timeout or DEFAULT_TIMEOUT) as client:
             resp = await client.post(
-                f"{OLLAMA_BASE_URL}/api/chat",
+                f"{OLLAMA_BASE_URL()}/api/chat",
                 json={
                     "model": TITLE_MODEL,
                     "messages": [{"role": "user", "content": prompt}],

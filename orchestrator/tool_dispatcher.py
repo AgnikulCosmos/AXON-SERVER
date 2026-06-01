@@ -26,7 +26,7 @@ async def dispatch_tool(query: str):
     logging.info(f"[TOOL DISPATCH] Tool={tool}, URL={url}, Q={clean_q}")
 
     try:
-        response = await asyncio.to_thread(requests.get, url, params={"q": clean_q}, timeout=50)
+        response = await asyncio.to_thread(requests.get, url, params={"q": clean_q}, timeout=25)
         response.raise_for_status()
 
         if tool == "arxiv":
@@ -39,6 +39,42 @@ async def dispatch_tool(query: str):
 
     except Exception as e:
         logging.error(f"[TOOL DISPATCH ERROR] Tool={tool} Error={e}")
+        if tool == "arxiv":
+            logging.info(f"[TOOL DISPATCH FALLBACK] Attempting DDGS fallback for arXiv query: {clean_q}")
+            ddgs_url = TOOL_ENDPOINTS["ddgs"]
+            fallback_query = f"site:arxiv.org {clean_q}"
+            try:
+                ddgs_resp = await asyncio.to_thread(
+                    requests.get, 
+                    ddgs_url, 
+                    params={"q": fallback_query}, 
+                    timeout=15
+                )
+                ddgs_resp.raise_for_status()
+                ddgs_data = ddgs_resp.json()
+                results = ddgs_data.get("results", [])
+                
+                if not results:
+                    return tool, "No relevant academic papers found via fallback search."
+                    
+                lines = []
+                for i, res in enumerate(results, start=1):
+                    title = res.get("title", "Unknown Title").replace(" - arXiv.org", "")
+                    abstract = res.get("body", "No abstract available.")
+                    url = res.get("href", "")
+                    lines.append(
+                        f"{i}. {title}\n"
+                        f"* Abstract: {abstract}...\n"
+                        f"* [Read Paper on arXiv]({url})\n\n"
+                        f"---"
+                    )
+                
+                formatted_fallback = "\n\n".join(lines)
+                logging.info(f"[TOOL DISPATCH FALLBACK SUCCESS] Successfully retrieved {len(results)} papers via DDGS")
+                return "arxiv", formatted_fallback
+            except Exception as fallback_err:
+                logging.error(f"[TOOL DISPATCH FALLBACK ERROR] Fallback failed: {fallback_err}")
+
         return tool, f"Tool {tool} failed to execute."
 
 

@@ -170,74 +170,133 @@ class _PersistentDict:
 PENDING_ERP_SESSIONS = _PersistentDict()
 
 
-def _is_erp_ticket_creation_query(query: str) -> bool:
-    """Detect if the query is for creating an ERP support ticket."""
-    q_lower = query.lower()
+
+
+
+async def contextualize_query_with_history(query: str, session_id: str | None) -> str:
+    if not session_id:
+        return query
+
+    try:
+        from orchestrator.frappe_client import call_frappe
+        session_data = call_frappe({
+            "tool": "axon.api.get_session",
+            "http_method": "GET",
+            "arguments": {"session_id": session_id}
+        })
+        session_dict = session_data.get("message") or {}
+        messages = session_dict.get("messages") or []
+
+        past_msgs = []
+        for msg in messages:
+            role = msg.get("role")
+            content = (msg.get("content") or "").strip()
+            # If the last message in DB is exactly the query being processed, exclude it
+            if role == "User" and content == query.strip() and msg == messages[-1]:
+                continue
+            past_msgs.append((role, content))
+
+        if not past_msgs:
+            return query
+
+        # Bypass contextualizer entirely if query contains a known Agnikul-specific named entity or domain term.
+        # These terms are unambiguous — rewriting them via LLM only causes errors.
+        _KNOWN_ENTITIES = {
+            # Core Spacecraft & Proper Nouns
+            "agnikul", "cosmos", "agnibaan", "agnilet", "dhanush", "sorted",
+            "launchpad", "sdsc", "shar", "isro", "axon", "erp",
+            "srinath", "moin", "satyanarayanan", "janardhana", "ravichandran", "spm", "raju", "chakravarthy"
+        }
+        query_lower_check = query.lower()
+        
+        # 1. Bypass if any specific Agnikul or ERP domain term is present
+        if any(entity in query_lower_check for entity in _KNOWN_ENTITIES):
+            logger.info(f"[Query Contextualizer] Bypassing rewrite — known entity/domain keyword in query: {query!r}")
+            return query
+
+        # Take up to last 6 messages
+        recent_history = past_msgs[-6:]
+        history_str = ""
+        for role, content in recent_history:
+            history_str += f"{role}: {content}\n"
+
+        prompt = f"""[System]
+You are a strict pronoun-resolution AI. Your ONLY job is to resolve ambiguous pronouns (it, he, she, they, this, that) in follow-up queries using the chat history.
+
+CRITICAL RULES:
+1. ONLY replace pronouns or add missing context (like "of Agnikul").
+2. NEVER replace, delete, or overwrite actual nouns or names that the user typed (e.g., if the user types "Royal Challengers", keep "Royal Challengers").
+3. If the user's query introduces a completely new topic or does not contain pronouns, output the query EXACTLY AS IS. Do not inject the previous topic.
+
+[Example 1]
+Chat History:
+User: What is Agnikul Cosmos?
+Assistant: It is a space company.
+Follow-up Query: Who founded it?
+Rewritten Query: Who founded Agnikul Cosmos?
+
+[Example 2]
+Chat History:
+User: Who is Virat Kohli?
+Assistant: He is a cricketer.
+Follow-up Query: Search wiki about Royal Challengers Bangalore
+Rewritten Query: Search wiki about Royal Challengers Bangalore
+
+[Example 3]
+Chat History:
+User: What is Dhanush?
+Assistant: It is a launch pedestal.
+Follow-up Query: Tell me about Leave policy
+Rewritten Query: Tell me about Leave policy
+
+[Current Chat]
+Chat History:
+{history_str}
+
+Follow-up Query: {query}
+Rewritten Query:"""
+
+        from orchestrator.qwen_agent import qwen_llm
+        resp = await qwen_llm.ainvoke(prompt)
+        rewritten = resp.content.strip().strip("\"'")
+        if rewritten:
+            logger.info(f"[Query Contextualizer] Original: {query!r} -> Rewritten: {rewritten!r}")
+            return rewritten
+
+    except Exception as err:
+        logger.warning(f"Failed to contextualize query: {err}")
     
-    # Must contain some support ticket reference
-    has_ticket_ref = any(x in q_lower for x in ["ticket", "support", "issue", "error", "bug", "problem", "assistance", "incident", "request erp"])
-    
-    # Must contain some creation verb
-    creation_verbs = ["raise", "create", "lodge", "submit", "report", "open", "file", "post", "add"]
-    has_creation_verb = any(x in q_lower for x in creation_verbs)
-    
-    # Skip leaves / checkins / other unrelated administrative creations
-    is_unrelated_creation = any(kw in q_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday", "checkin", "check out", "checkout", "check-in", "payroll", "salary slip", "lost", "found"])
-    
-    return has_creation_verb and has_ticket_ref and not is_unrelated_creation
-
-
-def _is_erp_ticket_list_query(query: str) -> bool:
-    """Detect if the query is for listing/showing ERP support tickets."""
-    q_lower = query.lower()
-    ticket_list_keywords = ["list tickets", "show tickets", "view tickets", "my tickets", "my support tickets", "list my tickets", "show my tickets", "view my tickets", "get tickets", "ticket status", "status of my tickets"]
-    is_unrelated = any(kw in q_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday"])
-    return any(kw in q_lower for kw in ticket_list_keywords) and not is_unrelated
-
-
-def _is_erp_feedback_creation_query(query: str) -> bool:
-    """Detect if the query is for creating ERP feedback/review."""
-    q_lower = query.lower()
-    feedback_verbs = ["give", "submit", "create", "leave", "post", "add", "provide", "write", "send"]
-    feedback_action = any(verb in q_lower for verb in feedback_verbs) and "feedback" in q_lower
-    feedback_keywords = ["give feedback", "submit feedback", "create feedback", "create a feedback", "leave feedback", "leave a feedback", "post feedback", "review", "rate", "rating"]
-    has_feedback_ref = feedback_action or any(kw in q_lower for kw in feedback_keywords)
-    is_unrelated = any(kw in q_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday", "checkin", "check-out", "checkout", "check-in", "payroll", "lost", "found"])
-    return has_feedback_ref and not is_unrelated
-
-
-def _is_erp_suggestion_creation_query(query: str) -> bool:
-    """Detect if the query is for creating ERP suggestion."""
-    q_lower = query.lower()
-    suggestion_verbs = ["give", "submit", "create", "leave", "post", "add", "provide", "write", "send"]
-    suggestion_action = any(verb in q_lower for verb in suggestion_verbs) and "suggestion" in q_lower
-    suggestion_keywords = ["suggestion", "improve", "enhancement", "feature request", "create suggestion", "create a suggestion", "submit suggestion", "submit a suggestion", "give suggestion", "give a suggestion", "leave suggestion", "leave a suggestion"]
-    has_suggestion_ref = suggestion_action or any(kw in q_lower for kw in suggestion_keywords)
-    is_unrelated = any(kw in q_lower for kw in ["leave", "casual leave", "sick leave", "earned leave", "privilege leave", "time off", "holiday", "checkin", "check-out", "checkout", "check-in", "payroll", "lost", "found"])
-    return has_suggestion_ref and not is_unrelated
-
-
-def _is_lost_found_create_query(query: str) -> bool:
-    q_lower = query.lower()
-    lost_create_keywords = ["lost my", "lost a", "report a lost", "record a lost", "report lost", "record lost", "lost item"]
-    found_create_keywords = ["found a", "found my", "mark as found", "mark found", "mark erp lost as found", "i found", "found lf-"]
-    has_found_ref = (
-        any(kw in q_lower for kw in found_create_keywords) or 
-        ("mark " in q_lower and " as found" in q_lower) or
-        ("found" in q_lower and "lf-" in q_lower)
-    )
-    return any(kw in q_lower for kw in lost_create_keywords) or has_found_ref
-
-def _is_lost_found_list_query(query: str) -> bool:
-    q_lower = query.lower()
-    lost_list_keywords = [
-        "list lost", "show lost", "view lost", "lost items", "lost ones", "lost and found",
-        "list found", "show found", "view found", "found items", "found ones"
-    ]
-    return any(kw in q_lower for kw in lost_list_keywords)
+    return query
 
 
 async def _run_agent(query: str, session_id: str | None = None):
+    # ── Check for Greetings and Identity BEFORE contextualization ──
+    # This prevents the history-rewriter from mangling simple conversational inputs.
+    temp_q = query.lower().strip("!?., ")
+    
+    # 1. Identity Check
+    if any(x in temp_q for x in ["who are you", "what is your name", "who is axon", "what can axon help", "what can you do"]):
+        identity_response = "I am Axon, your friendly internal ERP AI Assistant at Agnikul Cosmos! I can help you with internal systems, HR, payroll, operations, organizational structure, and enterprise workflows."
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(identity_response)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return identity_response
+
+    # 2. Greeting Check
+    from common.greeting import is_greeting, get_greeting_response
+    if is_greeting(query):
+        greeting_resp = get_greeting_response()
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(greeting_resp)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return greeting_resp
+
+    # Only contextualize if NOT in a pending session to avoid mangling form inputs
+    if not (session_id and session_id in PENDING_ERP_SESSIONS):
+        query = await contextualize_query_with_history(query, session_id)
+
     q = query.lower().strip("!?.,")
     logger.debug(f"[Session Tracking] Query: {query!r}, session_id: {session_id!r}, in_pending: {session_id in PENDING_ERP_SESSIONS if session_id else False}")
 
@@ -338,28 +397,11 @@ async def _run_agent(query: str, session_id: str | None = None):
         route = f"ERP_ROUTE:{pending_plan['route_name']}"
         plan = pending_plan
     else:
-        # ── First, check for ERP listing queries directly ──────────
-        if _is_lost_found_list_query(query):
-            route = "ERP_ROUTE:lost_found_list"
-            plan = _build_erp_plan("lost_found_list", query)
-        elif _is_lost_found_create_query(query):
-            route = "ERP_ROUTE:lost_found_create"
-            plan = _build_erp_plan("lost_found_create", query)
-        elif _is_erp_ticket_list_query(query):
-            route = "ERP_ROUTE:erp_tickets_list"
-            plan = _build_erp_plan("erp_tickets_list", query)
-        elif _is_erp_ticket_creation_query(query):
-            route = "ERP_ROUTE:erp_tickets_create"
-            plan = _build_erp_plan("erp_tickets_create", query)
-        elif _is_erp_feedback_creation_query(query):
-            route = "ERP_ROUTE:erp_feedback_create"
-            plan = _build_erp_plan("erp_feedback_create", query)
-        elif _is_erp_suggestion_creation_query(query):
-            route = "ERP_ROUTE:erp_suggestion_create"
-            plan = _build_erp_plan("erp_suggestion_create", query)
-        else:
-            route = await route_query(query)
-            plan = None
+        route = await route_query(query)
+        plan = None
+        if route and route.startswith("ERP_ROUTE:"):
+            route_name = route.split(":", 1)[1]
+            plan = _build_erp_plan(route_name, query)
 
     # -------------------------
     # TEST MODE
@@ -390,6 +432,14 @@ async def _run_agent(query: str, session_id: str | None = None):
         sys.stdout.flush()
         return identity_response
 
+    if "base model" in q or "which model" in q or "what model" in q or "underlying model" in q or "architecture" in q:
+        model_response = "The base model I am using is Qwen2.5 (specifically Qwen2.5-1.5B), developed by Alibaba Group and running locally on our internal servers using Ollama."
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(model_response)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return model_response
+
     if route == "PROFANITY":
         sys.stdout.write(f"{MARKER_FINAL_START}\n")
         await stream_text_word_by_word(PROFANITY_FALLBACK)
@@ -404,6 +454,14 @@ async def _run_agent(query: str, session_id: str | None = None):
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
         sys.stdout.flush()
         return greeting_response
+
+    if route == "IDENTITY":
+        identity_response = "I am Axon, your friendly internal ERP AI Assistant at Agnikul Cosmos! I can help you with internal systems, HR, payroll, operations, organizational structure, and enterprise workflows."
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(identity_response)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return identity_response
 
     if route == "RAG":
         result = rag_search(query)

@@ -21,11 +21,12 @@ def query(q: str):
         url = paper.entry_id
 
         lines.append(
-            f"{i}. {title}\n"
-            f"   Authors: {authors}\n"
-            f"   Year: {year}\n"
-            f"   Abstract: {abstract}\n"
-            f"   Link: {url}"
+            f"**{i}. {title}**\n"
+            f"* Authors: {authors}\n"
+            f"* Year: {year}\n"
+            f"* Abstract: {abstract}...\n"
+            f"* [Read Paper on arXiv]({url})\n\n"
+            f"---"
         )
 
     if not lines:

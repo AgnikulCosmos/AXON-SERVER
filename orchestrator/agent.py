@@ -7,7 +7,7 @@ import os
 from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-# from tools.registry import TOOLS
+from prompts.registry import SYSTEM_PROMPT
 
 # Markers for frontend parsing
 MARKER_REASONING_START = "<<<REASONING_START>>>"
@@ -80,18 +80,7 @@ else:
     llm_with_tools = llm
 
 
-# System prompt
-SYSTEM_PROMPT = """
-You are AXON, the intelligent assistant for Agnikul Cosmos.
 
-You can:
-- Answer general knowledge questions
-- Answer ERP and operational questions
-- Use tools when required to fetch or act on information
-
-Use tools ONLY when necessary.
-If no tool is needed, answer directly.
-"""
 
 
 async def run_axon(question: str, max_iterations: int = 5) -> str:

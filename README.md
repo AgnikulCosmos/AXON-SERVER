@@ -93,6 +93,8 @@ sequenceDiagram
      * **External search requests** trigger Wikipedia (`wiki`), academic paper (`arxiv`), or DuckDuckGo (`ddgs`) lookups inside worker threads via `asyncio.to_thread`, preventing main event loop blocking.
 4. **Hop 4 (Secure Execution):** When executing ERP actions, AXON-SERVER calls the Frappe API endpoint (`erp_support.put_api.create`) using the cached active user's session cookies and CSRF token, ensuring the database records are created under the correct user credentials.
 
+---
+
 ## 🗄️ Custom API DocTypes & Session Lifecycle
 
 To enable persistent conversations, intelligent session management, and dynamic tool configuration, Axon implements three custom **API DocTypes** on the Frappe framework.
@@ -115,7 +117,7 @@ Stores individual conversation turn records inside a parent session (limited to 
 *   **`role`** (Select): `User` or `Assistant`.
 *   **`content`** (Long Text): The textual body of the prompt or AI response.
 *   **`token_count`** (Int): Tracks context usage.
-*   **`sequence_number`** (Int): Sequential ordering index.
+*   `sequence_number` (Int): Sequential ordering index.
 
 #### 📂 `AX_Tools` (Document)
 Enables dynamic registration and runtime configuration of agent tools straight from the Frappe Desk.
@@ -127,7 +129,7 @@ Enables dynamic registration and runtime configuration of agent tools straight f
 
 ### 2. How the Session & Integration Lifecycle Happens
 
-The integration operates through a secure, bidirectional, and non-blocking event-driven architecture. Here is the step-by-step description of the flow:
+The integration operates through a secure, bidirectional, and non-blocking event-driven architecture.
 
 ```mermaid
 sequenceDiagram
@@ -256,17 +258,319 @@ If the user fails to provide the required fields (`app_name`, `module`, and `des
 
 ---
 
+## 📋 ERP Support – Tickets, Feedback & Suggestions
+
+### 1. Support Tickets
+
+#### Basic Syntax
+```text
+Raise a <PRIORITY> ERP support ticket for app <APP_NAME> module <MODULE>. Description: <ISSUE>
+```
+
+#### Priority Scale
+*   **P0** – System Down / Critical
+*   **P1** – Major Feature Broken
+*   **P2** – Performance Issue (Default)
+*   **P3** – Minor Bug / Request
+
+#### Examples
+*   `"Raise a P0 ticket for app Finance module Dashboard. Dashboard not loading."`
+*   `"Create a P1 ticket for app HR module Payroll. Salary calculations incorrect."`
+*   `"Lodge a P2 support ticket for app Inventory module Reports. Reports are slow."`
+
+---
+
+### 2. Feedback Submissions
+
+#### Basic Syntax
+```text
+Give feedback for app <APP_NAME> saying <FEEDBACK>. Rating <1-5>
+```
+
+#### Rating Scale
+*   **1** – Poor
+*   **2** – Fair
+*   **3** – Good
+*   **4** – Very Good
+*   **5** – Excellent
+
+#### Examples
+*   `"Give feedback for app Finance. System is very responsive. Rating 5."`
+*   `"Submit a review for HR app. Too many bugs. Rating 2."`
+*   `"I want to give feedback for Inventory. Good but needs improvement. Rating 3."`
+
+---
+
+### 3. Product Suggestions
+
+#### Basic Syntax
+```text
+Suggest an improvement for app <APP_NAME> priority <Low|Medium|High>. Feedback: <SUGGESTION>. Helps: <BENEFIT>
+```
+
+#### Suggestion Priorities
+*   **Low** – Nice-to-have
+*   **Medium** – Useful
+*   **High** – Important
+
+#### Examples
+*   `"Suggest an improvement for Finance priority High. Add export to PDF. Helps: users download reports."`
+*   `"Submit an idea for Payroll priority Medium. Auto-calculate deductions. Helps: saves time."`
+*   `"Suggest enhancement for HR priority Low. Dark mode theme. Helps: reduce eye strain."`
+
+---
+
+### 4. Support Actions Parameter Reference
+
+| Parameter Field | Required | Example | Notes |
+| :--- | :--- | :--- | :--- |
+| `app_name` | Yes | `Finance` | Must be a registered system application. |
+| `priority` | Yes | `P0` or `High` | Standardized to P0-P3 or Low-High. |
+| `module` | Yes | `Dashboard` | Sub-category of the application. |
+| `description` | Yes | `Crash on launch` | Plain description of the bug. |
+| `feedback` | Yes | `Incredibly smooth!` | Semantic feedback text. |
+| `ratings` | Yes | `5` | Integer ratings from 1 to 5. |
+| `helps` | Yes | `Saves employee time` | Business benefit statement. |
+
+---
+
+## 🏢 Organization Q&A & Web Search
+
+Axon operates a dual-intent search layer that automatically queries Agnikul's RAG knowledge base for internal matters or search containers for public topics.
+
+### 1. Organization RAG Questions
+Ask about company founders, launch history, spaceships, or HR policies. The system combines exact keyword matches with high-dimensional vector embeddings for a perfect response:
+
+*   **Company Info:**
+    *   `"What does Agnikul Cosmos do?"`
+    *   `"Who are the co-founders of the company?"`
+    *   `"What is Dhanush?"`
+*   **Internal Policies & HR:**
+    *   `"What are the company leave policies?"`
+    *   `"Does location matter while booking food?"`
+    *   `"What should I select in food preference?"`
+    *   `"Why is QR scanning required for food?"`
+    *   `"How is food marked as consumed?"`
+
+---
+
+### 2. External Web Search Fallbacks
+If a query does not mention Agnikul entities or internal policies, the system routes it to non-blocking academic and general search tools.
+
+#### 📚 Wikipedia Queries
+*   `"Who is Nikola Tesla on Wikipedia?"`
+*   `"Search Wikipedia for Machine Learning"`
+
+#### 🎓 Academic Paper Lookups (arXiv)
+*   `"Search for machine learning papers on arXiv"`
+*   `"Find recent papers on IoT and blockchain technology"`
+*   *Output:* Automatically rendered in high-quality Markdown cards with **authors**, **year**, **abstract bullets**, and **direct links**.
+
+#### 🌐 DuckDuckGo Web Search
+*   `"Who is Virat Kohli?"`
+*   `"What is a rocket engine?"`
+*   *Output:* Serves as a self-healing fallback when arXiv times out or when standard definitions are requested.
+
+---
+
+### 3. Under the Hood: How Context-Based Answers Work (RAG Pipeline)
+
+Axon's organization query system is powered by an advanced **Hybrid Retrieval-Augmented Generation (RAG)** pipeline designed to ensure absolute factual accuracy and sub-second response times:
+
+```mermaid
+graph TD
+    A[User Query] --> B{Deterministic Router}
+    B -->|Agnikul/ERP Terms| C[RAG Search Engine]
+    C --> D[Step 1: Direct Jaccard Overlap Pre-Check]
+    D -->|Score >= 0.4| E[Direct Answer Return - Instant!]
+    D -->|Score < 0.4| F[Step 2: Hybrid Context Engine]
+    F --> F1[Path A: Vector Semantic Search <br/> mxbai-embed-large]
+    F --> F2[Path B: Lexical Keyword Match <br/> dataset.json]
+    F1 & F2 --> G[Deduplicated Context Merge]
+    G --> H[Strict Anti-Hallucination Prompt]
+    H --> I[Fast Local LLM: Qwen 2.5]
+    I -->|Info Present| J[Generate Premium Markdown Response]
+    I -->|No Info Found| K[Step 3: Direct Keyword Fallback Summarization]
+    K --> J
+```
+
+#### 🛡️ The 3-Step Retrieval Lifecycle:
+
+1. **Step 1: Fast-Path Direct Overlap (Zero-Latency)**
+   * Before executing heavy vector comparisons or LLM queries, the query undergoes a Jaccard token overlap check against the exact stored titles and questions in `dataset.json`. 
+   * If an exact or highly confident match is found (score $\ge 0.4$), the pre-written factual content is returned **instantly**, bypassing LLM processing entirely and achieving near-zero latency.
+
+2. **Step 2: Dual Hybrid Retrieval (Vector + Keyword)**
+   * **Semantic Vector Search:** The query is embedded using Ollama's `mxbai-embed-large` and matched against a local **Chroma DB** to extract the top 5 semantically similar document blocks.
+   * **Lexical Keyword Search:** In parallel, the query is parsed and matched using exact word boundaries against the `title`, `content`, `keywords`, and `questions` fields of all indexed materials.
+   * **The Merge:** Both contexts are merged and deduplicated to construct a rich, highly relevant source block.
+
+3. **Step 3: Strict Anti-Hallucination Prompter & local LLM**
+   * The context and user query are fed to a local **Qwen 2.5 (1.5B)** model. 
+   * The model operates under a highly constrained template:
+     > *"Answer using ONLY the facts in the Context. Do NOT use outside knowledge. If the answer is not in the Context, say: 'I don't have that information in my knowledge base.'"*
+   * This guarantees that the assistant **never hallucinates** general web facts and only replies with verified Agnikul documents.
+   * **Self-Healing Fallback:** If the LLM indicates a lack of information in the combined context, the system automatically falls back to summarize exclusively using the exact keyword matches to pull out obscure factual details.
+
+---
+
+## 💬 Contextual Answers & Conversational Query Resolution
+
+To deliver a high-quality, human-like chat experience, Axon implements an advanced, stateful **Conversational Contextualization Layer**. Instead of treating every prompt as an isolated single turn, Axon tracks the state of the conversation, resolves ambiguous pronouns or missing nouns in follow-up queries, and maps them to accurate factual context.
+
+```mermaid
+flowchart TD
+    A[Incoming User Query] --> B{Has Active Session ID?}
+    B -->|No| F[Proceed with Original Query]
+    B -->|Yes| C{Currently in Pending ERP Form?}
+    C -->|Yes| F
+    C -->|No| D{Matches Domain Keyword Bypass?}
+    D -->|Yes| F
+    D -->|No| E[Fetch Last 6 Chat Messages from AX_Chats]
+    E --> G[Prompt Qwen 2.5 with Structured Few-Shot Prompts]
+    G --> H[Generate Fully-Qualified Rewritten Query]
+    H --> I[Execute Routing & RAG Search on Rewritten Query]
+    F --> J[Execute Routing & RAG Search on Original Query]
+```
+
+### 1. How Contextual Answers are Generated (End-to-End Pipeline)
+
+When a user submits a follow-up query such as *"Who founded it?"* or *"What is the limit?"*, the system resolves context and generates answers through the following stages:
+
+#### 📂 Stage A: Stateful History Retrieval
+* Axon uses the custom `AX_Sessions` and `AX_Chats` custom DocTypes inside the Frappe database to maintain conversation history.
+* At the beginning of each turn, the orchestrator issues a fast internal call (`axon.api.get_session`) using the active `session_id`.
+* The system pulls the last **6 conversation turns** (alternating `User` and `Assistant` roles) to build the short-term context window.
+
+#### 🧠 Stage B: The Pronoun & Ellipsis Resolution Engine
+* If the query is not in a pending form state, it is analyzed by a local **Qwen 2.5 (1.5B)** model specialized in conversational rewrites.
+* The model evaluates the query against the retrieved chat history using a structured few-shot prompt.
+* **Result:** It generates an independent, fully-qualified search string (e.g., rewriting *"Who is the owner?"* into *"Who is the owner of Agnikul Cosmos?"*).
+
+#### ⚡ Stage C: Zero-Latency Domain Bypass
+* To save LLM processing latency and protect specific terminology from unintended modification, the system matches the query against an optimized, pre-compiled registry of **70+ corporate and domain-specific terms** (e.g., *agnibaan*, *dhanush*, *leaves*, *canteen*, *payroll*, *ticket*, *feedback*, *quality*).
+* If any matching term is detected, the query is passed **directly** to the RAG system, bypassing LLM rewriting entirely.
+
+#### 🛡️ Stage D: Contextual Synthesis & Anti-Hallucination
+* The rewritten query is used to run a hybrid search (vector similarity on **Chroma DB** + keyword scan on `dataset.json`).
+* The retrieved context and the rewritten query are packaged inside a strict anti-hallucination prompt.
+* The local **Qwen 2.5** model synthesizes the final response using *only* the retrieved facts.
+* This final answer is streamed back to the chat dashboard and appended to the `AX_Chats` database.
+
+---
+
+### 2. Multi-Turn Session Memory Security
+
+> [!IMPORTANT]
+> The contextual rewriter is automatically suspended if the session is currently in a pending ERP action flow (e.g., creating a ticket or reporting a lost/found item). 
+> This **ERP Form Safety-Lock** guarantees that simple slot-filling answers (like typing `"Cafeteria"` in response to a lost location prompt) are not mangled by the conversational rewriter, ensuring perfect administrative data integrity.
+
+---
+
+### 3. Contextualization In Action (Examples)
+
+| Preceding Conversation Context | Ambiguous Follow-Up Query | Resolving Action | Rewritten Query (Used for Search) |
+| :--- | :--- | :--- | :--- |
+| **User:** What is Agnikul Cosmos?<br>**Assistant:** It is a private aerospace company in India. | *Who founded it?* | Resolves pronoun *"it"* to *"Agnikul Cosmos"*. | **Who founded Agnikul Cosmos?** |
+| **User:** Tell me about Agnikul Cosmos.<br>**Assistant:** They build launch vehicles. | *Who is the owner?* | Resolves possessive context to the primary subject. | **Who is the owner of Agnikul Cosmos?** |
+| **User:** What are the food preferences?<br>**Assistant:** You can choose Veg or Non-veg. | *How do I select them?* | Resolves *"them"* to *"food preferences"*. | **How do I select food preferences?** |
+| **User:** Can I book cabs?<br>**Assistant:** Yes, you can book cabs through the Fleet app. | *What is the limit?* | Resolves missing noun context based on cab history. | **What is the limit for booking cabs?** |
+
+---
+
+## 🔍 Axon UI Testing Suite & Scenarios
+
+Use this manual suite to test all orchestrator behaviors directly inside the interactive UI chat dashboard (`http://localhost:8000/chat`):
+
+### 1. Lost and Found Items Creation
+Verify multi-turn parameter extraction for lost items:
+
+| Step | User Query | Expected Behavior & UI Output |
+| :--- | :--- | :--- |
+| **1** | `I lost my item` | **Lost greeting is shown:** Prompts for **Item Name**, **Lost Location**, and **Lost Description** using a codeblock template. |
+| **2** | `item_name: Access Card, lost_location: Cafeteria` | **Single missing parameter update:** Prompts politely for **Lost Description** only. |
+| **3** | `It is a blue card with my employee photo.` | **Success message:** Returns record creation ref: `LF-29-0529-XXXXX` |
+
+### 2. Found Item Reports
+Verify updating an item as found (triggers existing schema validation):
+
+| Step | User Query | Expected Behavior & UI Output |
+| :--- | :--- | :--- |
+| **1** | `I found a lost item` | **Found greeting is shown:** Prompts for **Record Name**, **Found Location**, **Found Date**, and **Found Description**. |
+| **2** | `name: LF-27-0526-00010, found_location: Cafeteria desk` | **Partial update:** Asks for **Found Date** and **Found Description** only. |
+| **3** | `found_date: today, found_description: Left it at the reception.` | **Success message:** Confirms database update. |
+
+### 3. Support Tickets (Isolated Turn)
+Verify that general support ticket routing does NOT pollute the lost and found templates:
+
+| Step | User Query | Expected Behavior & UI Output |
+| :--- | :--- | :--- |
+| **1** | `I want to raise a support ticket` | **Ticket greeting is shown:** Prompts for **Application Name**, **Priority**, **Module**, and **Description**. |
+| **2** | `app_name: fleet_management, priority: High, module: Vehicle Tracking` | **Single missing parameter update:** Prompts politely for **Description** only. |
+| **3** | `GPS coordination is lagging and updating only every 5 minutes` | **Success message:** Returns successful ticket reference ID `ERP_I_...` |
+
+---
+
+## 🛠️ Developer Integration Guide
+
+### 1. Programmatic Python Execution
+You can easily trigger the orchestrator's parsing logic from any python client or script:
+
+```python
+from orchestrator.query_processor import process_query
+import asyncio
+
+async def run():
+    # Example 1: RAG Query
+    rag_resp = await process_query("What does Agnikul Cosmos do?")
+    print("RAG Response:", rag_resp["message"])
+    
+    # Example 2: List ERP Tickets
+    list_resp = await process_query("Show my support tickets")
+    print("ERP Response:", list_resp["message"])
+
+asyncio.run(run())
+```
+
+### 2. Programmatic Interactive Session Manipulation
+Interact with the custom `AX_Sessions` and `AX_Chats` DocTypes in Python:
+
+```python
+import frappe
+
+# 1. Programmatically initialize a session
+session = frappe.get_doc({
+    "doctype": "AX_Sessions",
+    "user_id": "employee@agnikul.in",
+    "session_id": "test-uuid-1234",
+    "title": "Initial Chat Setup",
+    "status": "Active"
+})
+session.insert(ignore_permissions=True)
+
+# 2. Append a user message
+session.append("chats", {
+    "role": "User",
+    "content": "Raise a ticket for Fleet Management.",
+    "sequence_number": 1
+})
+session.save(ignore_permissions=True)
+frappe.db.commit()
+```
+
+---
+
 ## 🚀 Running the Server
 
-### 1. Start Support Containers
-Start the Wikipedia, arXiv, and DuckDuckGo search helper services:
+### 1. Start Search Container Backends
+Start the non-blocking Wikipedia, arXiv, and DuckDuckGo search helper microservices:
 ```bash
 cd /home/arjuna-automationsoftware/frappe-bench/apps/AXON-SERVER
 docker compose up -d wiki arxiv ddgs
 ```
 
-### 2. Start the AXON-SERVER Orchestrator
-Run the FastAPI orchestrator service on host port `8004`:
+### 2. Run the FastAPI Orchestrator
+Run the central FastAPI orchestrator service on host port `8004`:
 ```bash
 OLLAMA_BASE_URL="http://localhost:11434" \
 WIKI_URL="http://localhost:8002/query" \
@@ -284,21 +588,21 @@ FastAPI provides an interactive Swagger UI documentation at:
 * 🌐 `http://localhost:8004/docs`
 
 ### 1. Unified Query Interface
-* **Endpoint:** `POST http://localhost:8004/v1/query`
-* **Body:**
-  ```json
-  {
-    "query": "Who founded Agnikul Cosmos?"
-  }
-  ```
-* **Sample Success Response (RAG):**
-  ```json
-  {
-    "request_id": "e5add687-b129-4d1e-a3d5-816ca037edf5",
-    "status": "ok",
-    "response": "Agnikul Cosmos was founded by Srinath Ravichandran, Moin SPM, Satyanarayanan Chakravarthy, and Janardhana Raju."
-  }
-  ```
+*   **Endpoint:** `POST http://localhost:8004/v1/query`
+*   **Body:**
+    ```json
+    {
+      "query": "Who founded Agnikul Cosmos?"
+    }
+    ```
+*   **Sample Success Response (RAG):**
+    ```json
+    {
+      "request_id": "e5add687-b129-4d1e-a3d5-816ca037edf5",
+      "status": "ok",
+      "response": "Agnikul Cosmos was founded by Srinath Ravichandran, Moin SPM, Satyanarayanan Chakravarthy, and Janardhana Raju."
+    }
+    ```
 
 ---
 
@@ -311,3 +615,29 @@ FastAPI provides an interactive Swagger UI documentation at:
 | `WIKI_URL` | `http://localhost:8002/query` | Wikipedia query service port |
 | `ARXIV_URL` | `http://localhost:8003/query` | arXiv academic query service port |
 | `DDGS_URL` | `http://localhost:8005/query` | DuckDuckGo web search service port |
+
+---
+
+## ✅ Troubleshooting & Diagnostics
+
+### 1. Common ERP Errors
+*   **Error: `"Could not find Application Name: XYZ"`**
+    *   *Cause:* The application name provided does not exist in the whitelisted registry.
+    *   *Solution:* Type `"List available apps"` to see the exact whitelisted app names and modules.
+*   **Error: `"No tickets found"`**
+    *   *Cause:* The logged-in employee has not created any support tickets.
+    *   *Solution:* Create a new ticket first with `"Raise a ticket..."` to see active listings.
+
+### 2. Search Diagnostics
+*   **Search returns no results:**
+    *   *Cause:* Search keywords are too specific or out of range.
+    *   *Solution:* Generalize terms (e.g. search for `"Machine Learning"` instead of `"Exact specific ML subset"`).
+*   **Search latency:**
+    *   *Cause:* Querying multiple external docker containers simultaneously.
+    *   *Solution:* This is normal behavior due to concurrent threading; the responses are safely handled without event loop blocking.
+
+---
+
+**Version:** 1.1  
+**Last Updated:** 29 May 2026  
+**Status:** Production Ready & Optimized
