@@ -59,6 +59,42 @@ def view_erp_support_details(docname: str) -> dict:
     )
 
 
+def view_packaging_details(docname: str) -> dict:
+    return _call(
+        "packaging_management.get_api.view_details",
+        "GET",
+        {"docname": docname},
+    )
+
+
+def view_maintenance_details(docname: str) -> dict:
+    return _call(
+        "maintenance_management.get_api.view_details",
+        "GET",
+        {"docname": docname},
+    )
+
+
+def get_food_log(
+    from_date: str,
+    to_date: str,
+    request_type: str = "Self",
+    location: str = "All",
+    meal_type: str = "All",
+) -> dict:
+    return _call(
+        "food.api.log.food_log",
+        "GET",
+        {
+            "from_date": from_date,
+            "to_date": to_date,
+            "request_type": request_type,
+            "location": location,
+            "meal_type": meal_type,
+        },
+    )
+
+
 def list_erp_tickets(
     from_date: str | None = None,
     to_date: str | None = None,
@@ -241,6 +277,27 @@ MCP_REGISTRY: dict[str, MCPTool] = {
         method="core.factory.api.get_data",
         http_method="GET",
         handler=list_lost_found,
+    ),
+    "view_packaging_details": MCPTool(
+        name="view_packaging_details",
+        description="View packaging request details by document name or ID.",
+        method="packaging_management.get_api.view_details",
+        http_method="GET",
+        handler=view_packaging_details,
+    ),
+    "view_maintenance_details": MCPTool(
+        name="view_maintenance_details",
+        description="View maintenance request details by document name or ID.",
+        method="maintenance_management.get_api.view_details",
+        http_method="GET",
+        handler=view_maintenance_details,
+    ),
+    "food_log_list": MCPTool(
+        name="food_log_list",
+        description="List or view food booking logs/history for a date range.",
+        method="food.api.log.food_log",
+        http_method="GET",
+        handler=get_food_log,
     ),
 }
 

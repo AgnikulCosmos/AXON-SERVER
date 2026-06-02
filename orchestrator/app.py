@@ -218,31 +218,8 @@ async def generate_title_endpoint(req: TitleGenerationRequest):
 
     conversation_summary = "\n".join(messages_text)
 
-    prompt = f"""
-You are a session title generator.
-
-Task:
-Analyze the conversation segment below and determine the dominant topic or primary user intent.
-
-Title Requirements:
-- Length: 4–8 words only
-- Must clearly reflect the core topic or objective
-- Be specific, not vague
-- Avoid generic phrases such as "General Discussion", "Chat", or "Help"
-- Do not include emojis, quotation marks, special characters, or trailing punctuation
-- Use domain-relevant terminology where applicable
-- Prefer noun phrases over full sentences
-- Do not invent topics not present in the conversation
-
-Conversation Segment:
-{conversation_summary}
-
-Output Rules:
-- Return ONLY the title
-- No explanations
-- No formatting
-- No additional text
-"""
+    from prompts.registry import TITLE_GENERATION_PROMPT
+    prompt = TITLE_GENERATION_PROMPT.format(conversation_summary=conversation_summary)
 
     try:
         async with httpx.AsyncClient(timeout=req.timeout or DEFAULT_TIMEOUT) as client:
@@ -260,7 +237,19 @@ Output Rules:
 
         raw_title = (data.get("message", {}).get("content", "") or "").strip()
 
-        title = raw_title.strip().strip("\"'").strip()
+        # Clean title of any markdown formatting (headers, bold, etc.) and emojis
+        cleaned_title = raw_title.strip()
+        cleaned_title = re.sub(r'^#+\s*', '', cleaned_title)
+        cleaned_title = cleaned_title.replace("**", "").replace("*", "").replace("__", "").replace("_", "").replace("`", "")
+        # Strip unicode emojis
+        cleaned_title = re.sub(r'[\U00010000-\U0010ffff]', '', cleaned_title)
+        cleaned_title = re.sub(r'[\u2600-\u27BF]', '', cleaned_title)
+        cleaned_title = re.sub(r'\s+', ' ', cleaned_title).strip()
+        # Strip leading/trailing colons/hyphens/spaces
+        cleaned_title = re.sub(r'^[:\-\s]+', '', cleaned_title).strip()
+        cleaned_title = re.sub(r'[:\-\s]+$', '', cleaned_title).strip()
+
+        title = cleaned_title
 
         if len(title) > 60:
             title = title[:57] + "..."

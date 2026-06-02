@@ -138,6 +138,23 @@ def _resolve_date(value) -> list:
             hour=23, minute=59, second=59
         )
 
+    # ── Task 2: Specific Month Names ─────────────────────────────────────
+    elif val in {
+        "january", "jan", "february", "feb", "march", "mar", "april", "apr",
+        "may", "june", "jun", "july", "jul", "august", "aug", "september", "sep", "sept",
+        "october", "oct", "november", "nov", "december", "dec"
+    }:
+        months = {
+            "january": 1, "jan": 1, "february": 2, "feb": 2, "march": 3, "mar": 3,
+            "april": 4, "apr": 4, "may": 5, "june": 6, "jun": 6, "july": 7, "jul": 7,
+            "august": 8, "aug": 8, "september": 9, "sep": 9, "sept": 9,
+            "october": 10, "oct": 10, "november": 11, "nov": 11, "december": 12, "dec": 12
+        }
+        m = months[val]
+        start = today.replace(month=m, day=1)
+        last_day = calendar.monthrange(today.year, m)[1]
+        end = today.replace(month=m, day=last_day, hour=23, minute=59, second=59)
+
     else:
         # Try to parse an ISO date
         try:

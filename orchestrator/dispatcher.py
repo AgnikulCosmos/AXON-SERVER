@@ -65,6 +65,10 @@ async def _get_friendly_missing_fields_message(fields: list[str], route_name: st
         single_greeting = "Thank you for your suggestion to improve the system! Let's get this submitted. I just need one more detail to proceed:"
         multi_greeting = "Thank you for your suggestion to improve the system! Let's get this submitted. Please provide the following details:"
         example_text = "Adding a night-mode theme would significantly reduce eye strain."
+    elif route_name == "track_request":
+        single_greeting = "I'll help you track your request. I just need the request ID to check its status:"
+        multi_greeting = "I'll help you track your request. Please provide the request ID:"
+        example_text = "PC-2026-0001"
     else:
         # Fallback to default check
         is_lost = any("lost" in f for f in fields) or any(f in {"item_name", "lost_description", "lost_location", "lost_date"} for f in fields)
@@ -220,41 +224,8 @@ async def contextualize_query_with_history(query: str, session_id: str | None) -
         for role, content in recent_history:
             history_str += f"{role}: {content}\n"
 
-        prompt = f"""[System]
-You are a strict pronoun-resolution AI. Your ONLY job is to resolve ambiguous pronouns (it, he, she, they, this, that) in follow-up queries using the chat history.
-
-CRITICAL RULES:
-1. ONLY replace pronouns or add missing context (like "of Agnikul").
-2. NEVER replace, delete, or overwrite actual nouns or names that the user typed (e.g., if the user types "Royal Challengers", keep "Royal Challengers").
-3. If the user's query introduces a completely new topic or does not contain pronouns, output the query EXACTLY AS IS. Do not inject the previous topic.
-
-[Example 1]
-Chat History:
-User: What is Agnikul Cosmos?
-Assistant: It is a space company.
-Follow-up Query: Who founded it?
-Rewritten Query: Who founded Agnikul Cosmos?
-
-[Example 2]
-Chat History:
-User: Who is Virat Kohli?
-Assistant: He is a cricketer.
-Follow-up Query: Search wiki about Royal Challengers Bangalore
-Rewritten Query: Search wiki about Royal Challengers Bangalore
-
-[Example 3]
-Chat History:
-User: What is Dhanush?
-Assistant: It is a launch pedestal.
-Follow-up Query: Tell me about Leave policy
-Rewritten Query: Tell me about Leave policy
-
-[Current Chat]
-Chat History:
-{history_str}
-
-Follow-up Query: {query}
-Rewritten Query:"""
+        from prompts.registry import CONTEXTUALIZER_PROMPT
+        prompt = CONTEXTUALIZER_PROMPT.format(history_str=history_str, query=query)
 
         from orchestrator.qwen_agent import qwen_llm
         resp = await qwen_llm.ainvoke(prompt)
@@ -302,14 +273,27 @@ async def _run_agent(query: str, session_id: str | None = None):
 
     # ── Check for pending ERP session ──────────────────────────────
     if session_id and session_id in PENDING_ERP_SESSIONS:
-        # Check if the user is explicitly switching to a different ERP intent
+        # Check if the user is explicitly switching to a different intent
         new_route = await route_query(query)
+        pending_plan = PENDING_ERP_SESSIONS[session_id]
+        pending_route = pending_plan.get("route_name")
+        
+        should_discard = False
         if new_route and new_route.startswith("ERP_ROUTE:"):
             matched_route_name = new_route.split(":", 1)[1]
-            pending_plan = PENDING_ERP_SESSIONS[session_id]
-            if matched_route_name != pending_plan.get("route_name"):
-                logger.info(f"User switched intent from {pending_plan.get('route_name')} to {matched_route_name}. Discarding pending session.")
-                del PENDING_ERP_SESSIONS[session_id]
+            if matched_route_name != pending_route:
+                should_discard = True
+        elif new_route in ("RAG", "TOOLS", "IDENTITY"):
+            # If tracking request, any RAG/TOOLS query is an intent switch.
+            # Otherwise, check if query looks like a distinct question/command.
+            if pending_route == "track_request":
+                should_discard = True
+            elif any(query.lower().startswith(prefix) for prefix in ["what ", "when ", "how ", "where ", "who ", "did i ", "show me ", "list ", "tell me "]):
+                should_discard = True
+                
+        if should_discard:
+            logger.info(f"User switched intent from {pending_route} to {new_route}. Discarding pending session.")
+            del PENDING_ERP_SESSIONS[session_id]
 
     if session_id and session_id in PENDING_ERP_SESSIONS:
         if q in ["cancel", "stop", "abort", "nevermind", "quit", "exit"]:
@@ -483,7 +467,13 @@ async def _run_agent(query: str, session_id: str | None = None):
             filters = plan.get("filters") or {}
             
             try:
-                if method.startswith("erp_support.") or route_name.startswith("lost_found_"):
+                if route_name in ("track_request", "food_log_list"):
+                    from orchestrator.tracking_client import execute_tracking_plan, format_tracking_response
+                    tool_response = execute_tracking_plan(plan)
+                    result = format_tracking_response(tool_response)
+                    if session_id and session_id in PENDING_ERP_SESSIONS:
+                        del PENDING_ERP_SESSIONS[session_id]
+                elif method.startswith("erp_support.") or route_name.startswith("lost_found_"):
                     tool_response = execute_erp_support_plan(plan)
                     result = format_erp_support_response(plan, tool_response)
                     if session_id and session_id in PENDING_ERP_SESSIONS:

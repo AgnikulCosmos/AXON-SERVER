@@ -39,6 +39,7 @@ _FIELD_LABELS = {
     "found_location": "Found Location",
     "found_date": "Found Date",
     "found_description": "Found Description",
+    "req_id": "Request ID",
 }
 
 _FIELD_HINTS = {
@@ -57,6 +58,7 @@ _FIELD_HINTS = {
     "found_location": "Where did you find the item?",
     "found_date": "e.g., today, yesterday, or YYYY-MM-DD",
     "found_description": "Any comments about finding it",
+    "req_id": "e.g., PC-2026-0001, MM-2026-0003, or ERP_I_9876",
 }
 
 

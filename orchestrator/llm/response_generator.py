@@ -28,27 +28,8 @@ _response_llm = ChatOllama(
     streaming=False,
 )
 
-_RESPONSE_PROMPT = """\
-You are an ERP assistant that converts structured data into clear answers.
-
-Rules:
-- Use the user query as context to understand what they asked.
-- Answer clearly and concisely in natural language.
-- If the data shows meal booking or consumption details, explain what was booked and consumed.
-- If the data contains leave, attendance, or other HR records, summarize them clearly.
-- If no data exists or the data list is empty, say that no records were found.
-- Do NOT output raw JSON or code blocks.
-- Do NOT add unnecessary caveats or disclaimers.
-- Be direct and helpful.
-
-User Query:
-{query}
-
-ERP Data:
-{data}
-
-Return only the final answer in natural language.
-"""
+from prompts.registry import RESPONSE_GENERATOR_PROMPT
+_RESPONSE_PROMPT = RESPONSE_GENERATOR_PROMPT
 
 
 def generate_response(query: str, frappe_data) -> str:

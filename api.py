@@ -230,31 +230,8 @@ async def generate_title_endpoint(req: TitleGenerationRequest):
 
     conversation_summary = "\n".join(messages_text)
 
-    prompt = f"""
-You are a session title generator.
-
-Task:
-Analyze the conversation segment below and determine the dominant topic or primary user intent.
-
-Title Requirements:
-- Length: 4–8 words only
-- Must clearly reflect the core topic or objective
-- Be specific, not vague
-- Avoid generic phrases such as "General Discussion", "Chat", or "Help"
-- Do not include emojis, quotation marks, special characters, or trailing punctuation
-- Use domain-relevant terminology where applicable
-- Prefer noun phrases over full sentences
-- Do not invent topics not present in the conversation
-
-Conversation Segment:
-{conversation_summary}
-
-Output Rules:
-- Return ONLY the title
-- No explanations
-- No formatting
-- No additional text
-"""
+    from prompts.registry import TITLE_GENERATION_PROMPT
+    prompt = TITLE_GENERATION_PROMPT.format(conversation_summary=conversation_summary)
 
     try:
         async with httpx.AsyncClient(timeout=req.timeout or DEFAULT_TIMEOUT) as client:

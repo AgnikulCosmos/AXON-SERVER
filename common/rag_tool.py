@@ -23,18 +23,8 @@ _summarizer_llm = ChatOllama(
     base_url=get_working_ollama_base_url()
 )
 
-_summary_template = """You are answering questions from the internal knowledge base of Agnikul Cosmos, an Indian private space launch company.
-All terms in the Context refer to Agnikul Cosmos's products, people, infrastructure, and operations — NOT to anything outside the company.
-Answer using ONLY the facts in the Context. Do NOT use outside knowledge. Do NOT start with "Based on" or "According to".
-If the answer is not in the Context, say: "I don't have that information in my knowledge base."
-
-Context:
-{context}
-
-Question:
-{question}
-
-Answer:"""
+from prompts.registry import RAG_SUMMARY_TEMPLATE
+_summary_template = RAG_SUMMARY_TEMPLATE
 
 _prompt = PromptTemplate.from_template(_summary_template)
 _summary_chain = _prompt | _summarizer_llm | StrOutputParser()

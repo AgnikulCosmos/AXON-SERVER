@@ -973,5 +973,50 @@
       "found_description",
       "found_by"
     ]
+  },
+  {
+    "route_name": "track_request",
+    "description": "Track a request status or view details of any request, ticket, task, or record by ID prefix.",
+    "examples": [
+      "track request PC-2026-0001",
+      "status of MM-2026-0003",
+      "check ticket ERP_I_9876",
+      "what is the status of MT-2026-0005?",
+      "view details of my request PC-06-26-1024"
+    ],
+    "doctype": "",
+    "frappe_method": "",
+    "parameters": {
+      "req_id": "string"
+    },
+    "field_mapping": {
+      "req_id": "req_id"
+    }
+  },
+  {
+    "route_name": "food_log_list",
+    "description": "List or view food booking logs/history, or check status of food/meal requests (Breakfast, Lunch, Dinner).",
+    "examples": [
+      "show my food log",
+      "what did I book for lunch today?",
+      "check my canteen food bookings for this week",
+      "list my meal requests from yesterday to today"
+    ],
+    "doctype": "",
+    "frappe_method": "food.api.log.food_log",
+    "parameters": {
+      "from_date": "date",
+      "to_date": "date",
+      "request_type": ["Self", "Manual FC", "Organisation", "Team"],
+      "location": "string",
+      "meal_type": ["Breakfast", "Lunch", "Dinner", "All"]
+    },
+    "field_mapping": {
+      "from_date": "from_date",
+      "to_date": "to_date",
+      "request_type": "request_type",
+      "location": "location",
+      "meal_type": "meal_type"
+    }
   }
 ]

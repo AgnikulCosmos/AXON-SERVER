@@ -33,66 +33,8 @@ _extractor_llm = ChatOllama(
     streaming=False,
 )
 
-# ── Task 3: Improved extraction prompt with temporal understanding ──────────
-_EXTRACT_PROMPT = """\
-You are a strict parameter extractor for an enterprise ERP system.
-
-Given a user query and a parameter schema, extract ONLY the parameters that are clearly present in the query.
-
-Rules:
-- Only extract parameters defined in the schema.
-- If a parameter has an enum list, the extracted value MUST be one of those options.
-- If a parameter has a type like "string", "date", "number", "datetime", "boolean", extract the value the user mentioned.
-- For dates, return one of the following keywords if mentioned: today, yesterday, tomorrow, this week, last week, this month, last month, this year, last year. Or return an ISO date (YYYY-MM-DD) if a specific date is mentioned.
-- For booleans, return true or false.
-- If a parameter is NOT mentioned in the query, do NOT include it in the JSON.
-- Return valid JSON only. No explanation, no comments, no markdown formatting.
-
-Few-Shot Examples:
-
-Example 1:
-Query: "I lost my blue access card in the cafeteria today"
-Schema:
-{{
-  "item_name": "string",
-  "lost_location": "string",
-  "lost_date": "date",
-  "lost_description": "string"
-}}
-Output:
-{{
-  "item_name": "Access Card",
-  "lost_location": "cafeteria",
-  "lost_date": "today",
-  "lost_description": "blue access card"
-}}
-
-Example 2:
-Query: "I found a red laptop charger in the conference room yesterday"
-Schema:
-{{
-  "item_name": "string",
-  "found_location": "string",
-  "found_date": "date",
-  "found_description": "string"
-}}
-Output:
-{{
-  "item_name": "Laptop Charger",
-  "found_location": "conference room",
-  "found_date": "yesterday",
-  "found_description": "red laptop charger"
-}}
-
-Now perform the extraction:
-Schema:
-{schema}
-
-User Query:
-{query}
-
-Respond ONLY with the JSON object of extracted parameters:
-"""
+from prompts.registry import PARAMETER_EXTRACTION_PROMPT
+_EXTRACT_PROMPT = PARAMETER_EXTRACTION_PROMPT
 # Cache holder for valid app names from Frappe
 _VALID_APP_NAMES_CACHE = None
 
