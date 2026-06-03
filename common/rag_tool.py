@@ -259,6 +259,15 @@ def rag_search(query: str) -> str:
                 if kw not in context_parts:
                     context_parts.append(kw)
 
+            # Prune irrelevant results if query is specifically about leave or food policies
+            if "leave" in query_lower and not any(w in query_lower for w in ["driver", "fleet", "maintenance", "insurance"]):
+                context_parts = [p for p in context_parts if "driver" not in p.lower() and "maintenance" not in p.lower() and "insurance" not in p.lower() and "appraisal" not in p.lower()]
+                kw_parts = [p for p in kw_parts if "driver" not in p.lower() and "maintenance" not in p.lower() and "insurance" not in p.lower() and "appraisal" not in p.lower()]
+            if "food" in query_lower or "canteen" in query_lower:
+                if not any(w in query_lower for w in ["log", "history", "yesterday", "today", "show", "list"]):
+                    context_parts = [p for p in context_parts if "preference" in p.lower() or "veg" in p.lower()]
+                    kw_parts = [p for p in kw_parts if "preference" in p.lower() or "veg" in p.lower()]
+
             if context_parts:
                 context_text = "\n\n".join(context_parts)[:12000]
                 try:

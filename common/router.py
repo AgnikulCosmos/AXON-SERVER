@@ -66,6 +66,19 @@ async def route_query(query: str) -> str:
     if any(x in q for x in ["who are you", "what is your name", "who is axon", "what can axon help", "what can you do"]):
         return "IDENTITY"
 
+    # Base model / LLM disclosure check
+    _MODEL_KEYWORDS = {
+        "base model", "model are you", "llm are you", "model you are using",
+        "llm you are using", "what model", "which model", "which llm", "what llm",
+        "model is this", "model you use", "llm you use", "based on which", "based on what",
+        "are you based on", "are you llama", "are you qwen", "are you gpt", "are you claude",
+        "are you gemini", "are you deepseek", "are you using llama", "are you using qwen",
+        "are you using gpt", "are you using deepseek", "are you using gemini", "are you using claude"
+    }
+    if any(k in q for k in _MODEL_KEYWORDS):
+        logger.info(f"[Router] Intercepted base model query: {query!r}")
+        return "GREETING_RESPONSE:I cannot disclose the details of the base model here."
+
     # Force TOOLS for public-figure questions that aren't Agnikul founders/employees
     _AGNIKUL_PEOPLE = {"srinath", "moin", "satyanarayanan", "janardhana", "ravichandran"}
     _who_match = re.search(r'\bwho\s+is\b', q)
@@ -73,6 +86,13 @@ async def route_query(query: str) -> str:
         # Not an Agnikul person → let external tools answer
         logger.info(f"[Router] Forcing TOOLS for public-figure query: {query!r}")
         return "TOOLS"
+
+    # Deterministic check for policy queries involving leave/food/canteen first
+    _POLICY_KEYWORDS = {"policy", "policies", "guideline", "guidelines", "rules", "rule", "handbook"}
+    _POLICY_DOMAINS = {"leave", "leaves", "food", "canteen", "cafeteria", "meal", "meals", "breakfast", "lunch", "dinner", "beverage", "beverages", "menu", "catering"}
+    if any(p in q for p in _POLICY_KEYWORDS) and any(d in q for d in _POLICY_DOMAINS):
+        logger.info(f"[Router] Deterministically routing policy query to RAG: {query!r}")
+        return "RAG"
 
     # Route ERP-related actions directly to LLM router for classification
     _ERP_KEYWORDS = {

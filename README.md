@@ -478,7 +478,7 @@ When a user submits a follow-up query such as *"Who founded it?"* or *"What is t
 
 ---
 
-## 🔍 Axon UI Testing Suite & Scenarios
+## Axon UI Testing Suite & Scenarios
 
 Use this manual suite to test all orchestrator behaviors directly inside the interactive UI chat dashboard (`http://localhost:8000/chat`):
 

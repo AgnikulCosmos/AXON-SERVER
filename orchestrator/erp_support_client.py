@@ -448,8 +448,8 @@ def _format_lost_found_list(data) -> str:
 
     current_user = get_current_user_email()
     
-    lines = [f"### 🔍 Active Lost Items ({len(lost_records)})"]
-    for record in lost_records:
+    lines = [f"###  Active Lost Items ({len(lost_records)})"]
+    for record in lost_records[:5]:
         name = record.get("name")
         item_name = record.get("item_name")
         location = record.get("lost_location")
@@ -459,10 +459,10 @@ def _format_lost_found_list(data) -> str:
         emp_name = record.get("employee_name") or owner
         
         card = [
-            f"**📦 {item_name}** ({name})",
-            f"📍 *Location:* {location} | 📅 *Date:* {date_str}",
-            f"👤 *Reported by:* {emp_name}",
-            f"📝 *Description:* {desc}"
+            f"**{item_name}** ({name})",
+            f"*Location:* {location} | *Date:* {date_str}",
+            f"*Reported by:* {emp_name}",
+            f"*Description:* {desc}"
         ]
         
         # Display the mark found button only if the record belongs to the current user
