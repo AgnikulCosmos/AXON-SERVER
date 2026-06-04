@@ -82,7 +82,14 @@ def sse_event(data: str, event_type: Optional[str] = None) -> str:
 
 def frappe_headers_from_request(request: Request) -> dict:
     forwarded = {}
-    for name in ("authorization", "cookie", "x-frappe-csrf-token"):
+    for name in (
+        "authorization",
+        "cookie",
+        "host",
+        "x-forwarded-host",
+        "x-frappe-csrf-token",
+        "x-frappe-site-name",
+    ):
         value = request.headers.get(name)
         if value:
             forwarded[name] = value

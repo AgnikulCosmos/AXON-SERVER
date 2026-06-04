@@ -74,7 +74,7 @@ def _ensure_csrf_header(headers: dict) -> bool:
 
     response = requests.get(
         f"{FRAPPE_URL}/api/method/axon.api.get_current_user",
-        headers={"cookie": cookie},
+        headers={key: value for key, value in headers.items() if key.lower() != "x-frappe-csrf-token"},
         timeout=FRAPPE_TIMEOUT,
     )
     response.raise_for_status()
