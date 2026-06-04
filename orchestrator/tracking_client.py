@@ -175,7 +175,7 @@ def format_tracking_response(normalized: dict) -> str:
         
     # Standard Request Details Formatting
     md = []
-    md.append(f"### 🔍 Request Tracking Details: **{normalized['id']}**")
+    md.append(f"### Request Tracking Details: **{normalized['id']}**")
     md.append(f"- **Application:** `{normalized['app_name']}`")
     md.append(f"- **Request Type:** {normalized['type']}")
     md.append(f"- **Status:** `{normalized['status']}`")
@@ -205,7 +205,7 @@ def _format_food_log(data: dict, date_range: str) -> str:
         return f"No food booking records found for the period **{date_range}**."
         
     md = []
-    md.append(f"### 🍽️ Food Booking Log Summary ({date_range})")
+    md.append(f"### Food Booking Log Summary ({date_range})")
     md.append(f"- **Total Booked:** {counts.get('Booked', 0)} | **Consumed:** {counts.get('Consumed', 0)} | **Not Consumed:** {counts.get('Not Consumed', 0)}")
     md.append("\n| Request Date | Location | Meal Type | Status |")
     md.append("| :--- | :--- | :--- | :--- |")

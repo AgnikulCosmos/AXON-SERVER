@@ -16,6 +16,7 @@ from orchestrator.erp_support_client import (
     execute_erp_support_plan,
     format_erp_support_response,
     MissingParametersError,
+    get_current_user_email,
 )
 from orchestrator.planning import router_pipeline
 from orchestrator.planning.parameter_extractor import extract_parameters
@@ -29,6 +30,93 @@ from orchestrator.frappe_client import (
     reset_frappe_request_headers,
     set_frappe_request_headers,
 )
+
+import re
+
+def is_unrelated_query(query: str) -> bool:
+    q = query.lower().strip()
+    
+    # Check if a query contains action verbs that aren't search-related or allowed
+    action_verbs = ["send", "mail", "email", "post", "tweet", "slack", "schedule", "delete", "remove", "download", "install", "execute", "run", "book", "reserve", "order"]
+    for verb in action_verbs:
+        if re.search(r'\b' + re.escape(verb) + r'\b', q):
+            # Exclude allowed contexts
+            if any(ok in q for ok in ["lost", "found", "food", "log", "ticket", "feedback", "suggestion", "track", "tracking"]):
+                continue
+            return True
+            
+    return False
+
+def check_employee_privacy(query: str, params: dict = None) -> str | None:
+    current_email = get_current_user_email() or "emp95@agnikul.in"
+    username = current_email.split('@')[0]
+    
+    # Extract digits from username
+    user_digits = "".join(filter(str.isdigit, username))
+    
+    # Founders
+    founders = {"srinath", "moin", "satyanarayanan", "janardhana", "ravichandran", "spm"}
+    
+    q = query.lower()
+    
+    # Check for other employee ID patterns (e.g. emp56, emp-56, emp 56)
+    emp_ids = re.findall(r'\bemp\s*[-_]?\s*(\d+)\b', q)
+    for eid in emp_ids:
+        if not user_digits or eid != user_digits:
+            return "I cannot disclose information about other employees."
+            
+    # Check for other email addresses
+    emails = re.findall(r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b', q)
+    for email in emails:
+        if email != current_email:
+            return "I cannot disclose information about other employees."
+            
+    # Check for Priya or other unauthorized names
+    words = re.findall(r'\b[a-zA-Z]{3,}\b', q)
+    for word in words:
+        if word in founders or word == username or word in username:
+            continue
+        if word == "priya":
+            return "I cannot disclose information about other employees."
+            
+    if params:
+        for val in params.values():
+            if not val or not isinstance(val, str):
+                continue
+            val_lower = val.lower()
+            param_emp_ids = re.findall(r'\bemp\s*[-_]?\s*(\d+)\b', val_lower)
+            for eid in param_emp_ids:
+                if not user_digits or eid != user_digits:
+                    return "I cannot disclose information about other employees."
+            param_emails = re.findall(r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b', val_lower)
+            for email in param_emails:
+                if email != current_email:
+                    return "I cannot disclose information about other employees."
+            if "priya" in val_lower:
+                return "I cannot disclose information about other employees."
+                
+    return None
+
+def sanitize_or_block_response(response_text: str) -> str:
+    current_email = get_current_user_email() or "emp95@agnikul.in"
+    username = current_email.split('@')[0]
+    user_digits = "".join(filter(str.isdigit, username))
+    
+    text_lower = response_text.lower()
+    emp_ids = re.findall(r'\bemp\s*[-_]?\s*(\d+)\b', text_lower)
+    for eid in emp_ids:
+        if not user_digits or eid != user_digits:
+            return "I cannot disclose information about other employees."
+            
+    emails = re.findall(r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b', text_lower)
+    for email in emails:
+        if email != current_email:
+            return "I cannot disclose information about other employees."
+            
+    if "priya" in text_lower:
+        return "I cannot disclose information about other employees."
+        
+    return response_text
 
 PROFANITY_FALLBACK = (
     "Please use respectful and professional language while interacting with Axon."
@@ -241,6 +329,71 @@ async def contextualize_query_with_history(query: str, session_id: str | None) -
 
 
 async def _run_agent(query: str, session_id: str | None = None):
+    temp_q = query.lower().strip("!?., ")
+
+    # 1. Unrelated Queries Filter
+    if is_unrelated_query(query):
+        fallback_msg = "I'm sorry, I couldn't perform that action."
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(fallback_msg)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return fallback_msg
+
+    # 2. Capabilities Check
+    if "capabilities" in temp_q or temp_q == "/capabilities":
+        capabilities_response = (
+            "My defined system capabilities include:\n"
+            "1. **ERP Support Management**: Create tickets, feedback, suggestions, and track status.\n"
+            "2. **Canteen & Food Log Management**: View canteen bookings and meal logs.\n"
+            "3. **Lost and Found Tracking**: Report lost/found items, list items, and resolve them.\n"
+            "4. **Internal RAG Retrieval**: Retrieve Agnikul company policies, leaves, and guidelines.\n"
+            "5. **General Reasoning**: Answer academic, coding, and general knowledge questions.\n"
+            "6. **External Tool Integration**: Fetch live search details from DuckDuckGo, Wikipedia, or arXiv.\n"
+            "7. **Tracking Requests**: Track status and details of existing support tickets (using prefixes like PC-, MM-, MT-, or ERP_I_)."
+        )
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(capabilities_response)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return capabilities_response
+
+    if query.startswith(("/arxiv", "/wiki", "/ddgs")):
+        # Route directly to the TOOLS path, bypassing semantic classifier, RAG search, greetings, etc.
+        tool_name, tool_result = await dispatch_tool(query)
+
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        sys.stdout.flush()
+
+        # Clean prefix for summarize_tool_output context
+        clean_q = query
+        if query.startswith("/arxiv"):
+            clean_q = query[len("/arxiv"):].lstrip()
+        elif query.startswith("/wiki"):
+            clean_q = query[len("/wiki"):].lstrip()
+        elif query.startswith("/ddgs"):
+            clean_q = query[len("/ddgs"):].lstrip()
+
+        result = await summarize_tool_output(
+            user_query=clean_q,
+            tool_name=tool_name,
+            tool_data=tool_result
+        )
+        result = sanitize_or_block_response(result)
+
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return result
+
+    # Employee Privacy Filter
+    privacy_error = check_employee_privacy(query)
+    if privacy_error:
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(privacy_error)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return privacy_error
+
     # ── Check for Greetings and Identity BEFORE contextualization ──
     # This prevents the history-rewriter from mangling simple conversational inputs.
     temp_q = query.lower().strip("!?., ")
@@ -273,29 +426,11 @@ async def _run_agent(query: str, session_id: str | None = None):
 
     # ── Check for pending ERP session ──────────────────────────────
     if session_id and session_id in PENDING_ERP_SESSIONS:
-        # Check if the user is explicitly switching to a different intent
-        new_route = await route_query(query)
         pending_plan = PENDING_ERP_SESSIONS[session_id]
         pending_route = pending_plan.get("route_name")
-        
-        should_discard = False
-        if new_route and new_route.startswith("ERP_ROUTE:"):
-            matched_route_name = new_route.split(":", 1)[1]
-            if matched_route_name != pending_route:
-                should_discard = True
-        elif new_route in ("RAG", "TOOLS", "IDENTITY"):
-            # If tracking request, any RAG/TOOLS query is an intent switch.
-            # Otherwise, check if query looks like a distinct question/command.
-            if pending_route == "track_request":
-                should_discard = True
-            elif any(query.lower().startswith(prefix) for prefix in ["what ", "when ", "how ", "where ", "who ", "did i ", "show me ", "list ", "tell me "]):
-                should_discard = True
-                
-        if should_discard:
-            logger.info(f"User switched intent from {pending_route} to {new_route}. Discarding pending session.")
-            del PENDING_ERP_SESSIONS[session_id]
+        missing_fields = pending_plan.get("_missing_fields") or []
 
-    if session_id and session_id in PENDING_ERP_SESSIONS:
+        # 1. Quick cancel check first
         if q in ["cancel", "stop", "abort", "nevermind", "quit", "exit"]:
             del PENDING_ERP_SESSIONS[session_id]
             msg = "Okay, I've cancelled that request."
@@ -305,10 +440,7 @@ async def _run_agent(query: str, session_id: str | None = None):
             sys.stdout.flush()
             return msg
 
-        pending_plan = PENDING_ERP_SESSIONS[session_id]
-        missing_fields = pending_plan.get("_missing_fields") or []
-
-        # ── Parse structured "field: value" reply ──────────────────
+        # 2. Parse structured "field: value" reply
         import re as _re
         structured_params = {}
         matches = _re.finditer(r"\b([a-zA-Z_]+)\s*:\s*(.*?)(?=\s+\b[a-zA-Z_]+\s*:|$)", query, flags=_re.S)
@@ -333,13 +465,15 @@ async def _run_agent(query: str, session_id: str | None = None):
         if "rating" in structured_params:
             structured_params["ratings"] = structured_params.pop("rating")
 
-        # If the user used structured key-value format, use it.
-        # Otherwise, use extract_parameters to run LLM-based intelligent extraction!
+        # Extract parameters intelligently
+        new_params = {}
+        has_extracted_params = False
         if structured_params:
             new_params = structured_params
+            has_extracted_params = True
         else:
             router = SemanticRouter()
-            route_config = next((route for route in router.routes if route.get("route_name") == pending_plan["route_name"]), None)
+            route_config = next((route for route in router.routes if route.get("route_name") == pending_route), None)
             if route_config:
                 from copy import deepcopy
                 temp_config = deepcopy(route_config)
@@ -349,37 +483,59 @@ async def _run_agent(query: str, session_id: str | None = None):
                     if k in missing_fields
                 }
                 new_params = extract_parameters(query, temp_config)
-            else:
-                new_params = {}
+                if new_params:
+                    has_extracted_params = True
 
+        # 3. Check for intent switch ONLY if the user did NOT provide any parameter values for the pending session.
+        should_discard = False
+        if not has_extracted_params:
+            new_route = await route_query(query)
+            if new_route and new_route.startswith("ERP_ROUTE:"):
+                matched_route_name = new_route.split(":", 1)[1]
+                if matched_route_name != pending_route:
+                    should_discard = True
+            elif new_route in ("RAG", "TOOLS", "IDENTITY"):
+                # If tracking request, any RAG/TOOLS query is an intent switch.
+                # Otherwise, check if query looks like a distinct question/command.
+                if pending_route == "track_request":
+                    should_discard = True
+                elif any(query.lower().startswith(prefix) for prefix in ["what ", "when ", "how ", "where ", "who ", "did i ", "show me ", "list ", "tell me "]):
+                    should_discard = True
+
+            if should_discard:
+                logger.info(f"User switched intent from {pending_route} to {new_route}. Discarding pending session.")
+                del PENDING_ERP_SESSIONS[session_id]
+
+        # 4. If the session is still active, process the parameters
+        if session_id and session_id in PENDING_ERP_SESSIONS:
             # Fallback: if Qwen could not extract anything and there is only 1 missing field,
             # assume the entire query string is the value for that single missing field.
             if not new_params and len(missing_fields) == 1:
                 new_params = {missing_fields[0]: query.strip()}
 
-        if not new_params:
-            result = await _get_friendly_missing_fields_message(missing_fields, pending_plan.get("route_name"))
-            sys.stdout.write(f"{MARKER_FINAL_START}\n")
-            await stream_text_word_by_word(result)
-            sys.stdout.write(f"{MARKER_FINAL_END}\n")
-            sys.stdout.flush()
-            return result
+            if not new_params:
+                result = await _get_friendly_missing_fields_message(missing_fields, pending_plan.get("route_name"))
+                sys.stdout.write(f"{MARKER_FINAL_START}\n")
+                await stream_text_word_by_word(result)
+                sys.stdout.write(f"{MARKER_FINAL_END}\n")
+                sys.stdout.flush()
+                return result
 
-        # Normalise app_name aliases in the reply
-        if "app_name" in new_params:
-            from orchestrator.planning.parameter_extractor import APP_NAME_MAPPING
-            cand = new_params["app_name"].strip().lower()
-            for canonical, aliases in APP_NAME_MAPPING.items():
-                if cand == canonical.lower() or any(cand == a.lower() for a in aliases):
-                    new_params["app_name"] = canonical
-                    break
+            # Normalise app_name aliases in the reply
+            if "app_name" in new_params:
+                from orchestrator.planning.parameter_extractor import APP_NAME_MAPPING
+                cand = new_params["app_name"].strip().lower()
+                for canonical, aliases in APP_NAME_MAPPING.items():
+                    if cand == canonical.lower() or any(cand == a.lower() for a in aliases):
+                        new_params["app_name"] = canonical
+                        break
 
-        if pending_plan.get("parameters") is None:
-            pending_plan["parameters"] = {}
-        pending_plan["parameters"].update(new_params)
+            if pending_plan.get("parameters") is None:
+                pending_plan["parameters"] = {}
+            pending_plan["parameters"].update(new_params)
 
-        route = f"ERP_ROUTE:{pending_plan['route_name']}"
-        plan = pending_plan
+            route = f"ERP_ROUTE:{pending_plan['route_name']}"
+            plan = pending_plan
     else:
         route = await route_query(query)
         plan = None
@@ -416,8 +572,8 @@ async def _run_agent(query: str, session_id: str | None = None):
         sys.stdout.flush()
         return identity_response
 
-    if "base model" in q or "which model" in q or "what model" in q or "underlying model" in q or "architecture" in q:
-        model_response = "The base model I am using is Qwen2.5 (specifically Qwen2.5-1.5B), developed by Alibaba Group and running locally on our internal servers using Ollama."
+    if "qwen" in q or "base model" in q or "which model" in q or "what model" in q or "underlying model" in q or "architecture" in q:
+        model_response = "I cannot disclose the details of the base model here."
         sys.stdout.write(f"{MARKER_FINAL_START}\n")
         await stream_text_word_by_word(model_response)
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
@@ -449,6 +605,7 @@ async def _run_agent(query: str, session_id: str | None = None):
 
     if route == "RAG":
         result = rag_search(query)
+        result = sanitize_or_block_response(result)
         sys.stdout.write(f"{MARKER_FINAL_START}\n")
         await stream_text_word_by_word(result)
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
@@ -463,6 +620,15 @@ async def _run_agent(query: str, session_id: str | None = None):
                 plan["original_query"] = query
 
         if plan:
+            # Check privacy on parameters
+            privacy_error = check_employee_privacy(query, plan.get("parameters"))
+            if privacy_error:
+                sys.stdout.write(f"{MARKER_FINAL_START}\n")
+                await stream_text_word_by_word(privacy_error)
+                sys.stdout.write(f"{MARKER_FINAL_END}\n")
+                sys.stdout.flush()
+                return privacy_error
+
             method = plan["method"]
             filters = plan.get("filters") or {}
             
@@ -506,7 +672,7 @@ async def _run_agent(query: str, session_id: str | None = None):
             result = "No matching ERP route could be resolved for your query."
 
         logger.info("Result for ERP route: %s (type: %s)", result, type(result))
-        result_str = str(result)
+        result_str = sanitize_or_block_response(str(result))
         sys.stdout.write(f"{MARKER_FINAL_START}\n")
         await stream_text_word_by_word(result_str)
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
@@ -518,6 +684,7 @@ async def _run_agent(query: str, session_id: str | None = None):
         sys.stdout.flush()
 
         result = await run_qwen(query)
+        result = sanitize_or_block_response(result)
 
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
         sys.stdout.flush()
@@ -534,6 +701,7 @@ async def _run_agent(query: str, session_id: str | None = None):
             tool_name=tool_name,
             tool_data=tool_result
         )
+        result = sanitize_or_block_response(result)
 
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
         sys.stdout.flush()
@@ -542,7 +710,8 @@ async def _run_agent(query: str, session_id: str | None = None):
     # -------------------------
     # DEFAULT: AXON
     # -------------------------
-    return await run_axon(query)
+    res = await run_axon(query)
+    return sanitize_or_block_response(res)
 
 
 def _build_erp_plan(route_name: str, query: str) -> dict | None:

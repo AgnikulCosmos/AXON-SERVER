@@ -168,6 +168,7 @@ def extract_parameters(query: str, route_config: dict) -> dict:
     # ── 2. Deterministic fallback ────────────────────────────────────────
     fallback = _keyword_extract(query, params_schema)
     fallback.update(_erp_support_extract(query, route_config, params_schema))
+    fallback.update(_lost_found_extract(query, params_schema))
 
     for key, value in fallback.items():
         # Deterministic fallback (especially regex/enums) is much more accurate
@@ -180,7 +181,32 @@ def extract_parameters(query: str, route_config: dict) -> dict:
         if str(extracted_params["module"]).lower() == str(extracted_params["app_name"]).lower():
             del extracted_params["module"]
 
-    # ── Post-processing for Lost and Found ──────────────────────────────
+    # ── Post-processing / Cleanups ──────────────────────────────────────
+    if "app_name" in extracted_params:
+        app_val = str(extracted_params["app_name"]).strip()
+        if app_val in ("erp_support", "ERP Support"):
+            q_clean = query.lower()
+            q_clean = re.sub(r"\bsupport\s+(?:ticket|request|plan|action|need|create|raise)s?\b", "", q_clean)
+            q_clean = re.sub(r"\braise\s+(?:a\s+)?support\b", "", q_clean)
+            q_clean = re.sub(r"\bcreate\s+(?:a\s+)?support\b", "", q_clean)
+            if "support" not in q_clean:
+                logger.info(f"Discarding generic erp_support app_name extraction: {app_val}")
+                del extracted_params["app_name"]
+
+    if "description" in extracted_params:
+        desc_val = str(extracted_params["description"]).strip().lower().strip("!?.,'")
+        generic_triggers = {
+            "create support ticket", "raise support ticket", "raise a ticket", "lodge a ticket",
+            "create a ticket", "open a support request", "lodge a support ticket", "support ticket",
+            "ticket", "i need to create a ticket", "i need to create a support ticket",
+            "i want to raise a ticket", "i want to raise a support ticket", "create support ticket",
+            "create a support ticket", "raise a support ticket", "open a support ticket",
+            "i need to raise a ticket", "raise a support request", "create a support request"
+        }
+        if desc_val in generic_triggers:
+            logger.info(f"Discarding generic description: {desc_val}")
+            del extracted_params["description"]
+
     route_name = route_config.get("route_name", "")
     if route_name == "lost_found_create":
         if "name" in extracted_params:
@@ -424,6 +450,35 @@ def _erp_support_extract(query: str, route_config: dict, schema: dict) -> dict:
                     extracted[field] = value
                     break
 
+    # ── Heuristic fallback for suggestions/feedback benefit markers ──
+    if route_name == "erp_suggestion_create":
+        if "feedback" in schema and "helps" in schema:
+            if "feedback" not in extracted or "helps" not in extracted:
+                q_clean = query.strip()
+                benefit_pattern = r"\b(would|helps to|helps|so that|to help|in order to)\b"
+                match_benefit = re.search(benefit_pattern, q_clean, re.I)
+                if match_benefit:
+                    marker_idx = match_benefit.start()
+                    feedback_part = q_clean[:marker_idx].strip()
+                    helps_part = q_clean[marker_idx:].strip()
+
+                    # Clean up the feedback part
+                    feedback_part = re.sub(r"^(?:suggest|suggestion|suggesting|adding a suggestion|i have a suggestion|submit a suggestion|submit suggestion|to improve|improve|suggest to)\b", "", feedback_part, flags=re.I).strip()
+                    # Remove app name aliases if present in feedback
+                    for canonical, aliases in APP_NAME_MAPPING.items():
+                        for alias in aliases:
+                            feedback_part = re.sub(rf"\bfor\s+(?:the\s+)?{re.escape(alias)}\b", "", feedback_part, flags=re.I)
+                            feedback_part = re.sub(rf"\bin\s+(?:the\s+)?{re.escape(alias)}\b", "", feedback_part, flags=re.I)
+                            feedback_part = re.sub(rf"\b{re.escape(alias)}\b", "", feedback_part, flags=re.I)
+
+                    feedback_part = re.sub(r"\s+", " ", feedback_part).strip(",. ")
+                    helps_part = re.sub(r"\s+", " ", helps_part).strip(",. ")
+
+                    if feedback_part and len(feedback_part) > 3:
+                        extracted["feedback"] = feedback_part
+                    if helps_part:
+                        extracted["helps"] = helps_part
+
     return extracted
 
 
@@ -435,42 +490,72 @@ def _lost_found_extract(query: str, schema: dict) -> dict:
     extracted = {}
     q_lower = query.lower()
     
-    # Only run if lost_found parameters exist
-    if "item_name" not in schema:
+    # If the schema is for lost_found creation
+    is_lost_schema = "item_name" in schema or "lost_location" in schema
+    is_found_schema = "found_location" in schema
+    
+    if not (is_lost_schema or is_found_schema):
         return {}
-        
-    # Pattern 1: "I lost my <item> in the <location> <date>" or "I lost my <item> in <location>"
-    # e.g., "I lost my access card in the cafeteria today"
+
+    # Extract location (lost or found)
+    # Search for patterns like: "lost it at <location>", "lost at <location>", "lost in <location>", "at <location>", "in <location>", "found it at <location>"
+    location_match = re.search(r"\b(?:lost|found)(?:\s+it|\s+them|\s+my\s+[a-zA-Z0-9_ -]+)?\s+(?:at|in|near|inside|around)\s+(?:the\s+)?([A-Za-z0-9_& -]+?)(?:\.|$|\s+today|\s+yesterday|\s+tomorrow)", q_lower)
+    if not location_match:
+        # Fallback to simple "at <location>" or "in <location>" if it is at the end of the query or followed by punctuation
+        location_match = re.search(r"\b(?:at|in|near|inside|around)\s+(?:the\s+)?([A-Za-z0-9_& -]+?)(?:\.|$|\s+today|\s+yesterday|\s+tomorrow)", q_lower)
+
+    location_val = None
+    if location_match:
+        location_val = location_match.group(1).strip()
+        # Filter out common temporal keywords or descriptive nouns that aren't locations
+        if location_val.lower() in ("today", "yesterday", "tomorrow", "this week", "last week", "a", "an", "the", "my"):
+            location_val = None
+
+    if location_val:
+        if "lost_location" in schema:
+            extracted["lost_location"] = location_val.title()
+        elif "found_location" in schema:
+            extracted["found_location"] = location_val.title()
+
+    # Extract item name and description
+    # Pattern: "lost my <item>" or "found a <item>"
+    item_match = re.search(r"\b(?:lost|found)\s+(?:my|a|an|the|some)\s+([A-Za-z0-9_ -]+?)(?:\s+(?:in|at|near|inside|around|today|yesterday|tomorrow|with|of)|\.|$)", q_lower)
+    if item_match:
+        extracted["item_name"] = item_match.group(1).strip().title()
+
+    # If the user provides a detailed description like "The purse is black colour with logo"
+    # Let's match descriptions like "<item> is/was <desc>"
+    desc_match = re.search(r"\b([A-Za-z0-9_ -]+?)\s+(?:is|was|has)\s+([A-Za-z0-9_ -]+?)(?:\s+and\s+i\s+lost\s+|$|\.)", q_lower)
+    if desc_match:
+        subj = desc_match.group(1).strip().lower()
+        desc = desc_match.group(2).strip()
+        if "item_name" in extracted and extracted["item_name"].lower() in subj or subj in ("purse", "bag", "phone", "card", "keys", "wallet", "charger"):
+            if "lost_description" in schema:
+                extracted["lost_description"] = f"{subj.title()} is {desc}"
+            elif "found_description" in schema:
+                extracted["found_description"] = f"{subj.title()} is {desc}"
+
+    # Also check traditional templates/patterns
+    # Pattern 1: "I lost my <item> in the <location>"
     match1 = re.search(r"\blost my\s+([A-Za-z0-9_& -]+?)\s+in(?: the)?\s+([A-Za-z0-9_& -]+?)(?:\s+(?:today|yesterday|tomorrow|this week|last week)|\.|$)", q_lower)
     if match1:
-        extracted["item_name"] = match1.group(1).strip()
-        extracted["lost_location"] = match1.group(2).strip()
+        extracted["item_name"] = match1.group(1).strip().title()
+        if "lost_location" in schema:
+            extracted["lost_location"] = match1.group(2).strip().title()
         
     # Pattern 2: "I lost my <item> at <location>"
-    # e.g., "I lost my phone at reception"
     match2 = re.search(r"\blost my\s+([A-Za-z0-9_& -]+?)\s+at\s+([A-Za-z0-9_& -]+?)(?:\s+(?:today|yesterday|tomorrow)|\.|$)", q_lower)
     if match2:
-        extracted["item_name"] = match2.group(1).strip()
-        extracted["lost_location"] = match2.group(2).strip()
-        
-    # Pattern 3: "lost <item> in <location>"
-    match3 = re.search(r"\blost\s+([A-Za-z0-9_& -]+?)\s+in\s+([A-Za-z0-9_& -]+?)(?:\s+(?:today|yesterday|tomorrow)|\.|$)", q_lower)
-    if match3 and "item_name" not in extracted:
-        extracted["item_name"] = match3.group(1).strip()
-        extracted["lost_location"] = match3.group(2).strip()
+        extracted["item_name"] = match2.group(1).strip().title()
+        if "lost_location" in schema:
+            extracted["lost_location"] = match2.group(2).strip().title()
 
     # Clean up and validate
     for k in list(extracted.keys()):
         val = extracted[k]
-        if not val or val.lower() in ["a", "an", "the", "my", "item"]:
+        if not val or (isinstance(val, str) and val.lower() in ["a", "an", "the", "my", "item"]):
             del extracted[k]
-        else:
-            # Capitalize first letter of item_name for nice display
-            if k == "item_name":
-                extracted[k] = val.title()
-            else:
-                extracted[k] = val
-                
+
     return extracted
 
 

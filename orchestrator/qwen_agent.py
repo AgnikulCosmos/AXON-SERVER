@@ -84,6 +84,13 @@ async def summarize_tool_output(
     tool_name: str,
     tool_data: any
 ) -> str:
+    if tool_name == "ddgs" and isinstance(tool_data, dict):
+        results = tool_data.get("results", [])
+        for res in results:
+            url = res.get("href")
+            if url and not url.endswith("#duckduckgo"):
+                res["href"] = url + "#duckduckgo"
+
     if tool_name == "arxiv":
         formatted_data = str(tool_data)
         for line in formatted_data.split("\n"):
@@ -118,4 +125,20 @@ async def summarize_tool_output(
         sys.stdout.flush()
         full_content.append(final_processed)
 
-    return "".join(full_content)
+    response_str = "".join(full_content)
+    if tool_name == "ddgs" and isinstance(tool_data, dict):
+        results = tool_data.get("results", [])
+        sources = []
+        for res in results[:3]:
+            title = res.get("title", "Source").strip()
+            title = re.sub(r'[\[\]]', '', title)  # clean brackets
+            url = res.get("href")
+            if url:
+                sources.append(f"[{title}]({url})")
+        if sources:
+            sources_str = "\n\n**Sources:** " + " | ".join(sources)
+            sys.stdout.write(sources_str.replace("\n", "<br/>"))
+            sys.stdout.flush()
+            response_str += sources_str
+
+    return response_str

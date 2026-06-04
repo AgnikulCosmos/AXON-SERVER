@@ -15,7 +15,18 @@ TOOL_ENDPOINTS = {
 }
 
 async def dispatch_tool(query: str):
-    tool = _infer_tool(query)
+    forced_tool = None
+    if query.startswith("/arxiv"):
+        forced_tool = "arxiv"
+        query = query[len("/arxiv"):].lstrip()
+    elif query.startswith("/wiki"):
+        forced_tool = "wiki"
+        query = query[len("/wiki"):].lstrip()
+    elif query.startswith("/ddgs"):
+        forced_tool = "ddgs"
+        query = query[len("/ddgs"):].lstrip()
+
+    tool = forced_tool if forced_tool else _infer_tool(query)
 
     if tool not in TOOL_ENDPOINTS:
         return tool, f"Unknown tool: {tool}"

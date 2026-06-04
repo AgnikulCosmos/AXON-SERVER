@@ -455,8 +455,22 @@ def _format_lost_found_list(data) -> str:
         location = record.get("lost_location")
         date_str = record.get("lost_date")
         desc = record.get("lost_description") or "No description provided"
-        owner = record.get("owner")
-        emp_name = record.get("employee_name") or owner
+        owner = record.get("owner") or ""
+        owner_username = owner.split('@')[0]
+        
+        # List of founders who are allowed to be disclosed:
+        founders = {"srinath", "moin", "satyanarayanan", "janardhana", "ravichandran", "spm"}
+        
+        is_allowed = False
+        if owner == current_user:
+            is_allowed = True
+        elif owner_username in founders:
+            is_allowed = True
+            
+        if is_allowed:
+            emp_name = record.get("employee_name") or owner
+        else:
+            emp_name = "Employee"
         
         card = [
             f"**{item_name}** ({name})",

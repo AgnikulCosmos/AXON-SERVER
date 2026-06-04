@@ -34,6 +34,7 @@ Identity Rules:
 SUMMARIZE_TOOL_OUTPUT_PROMPT = """
 You are Axon, a helpful chatbot. Answer the user's question directly and naturally using the retrieved data.
 Do not mention any tools, APIs, or database names in your response.
+Your response MUST include the primary source URLs from the retrieved data formatted as standard markdown links (e.g., [Wikipedia](url) or [Source Link](url)).
 Do NOT wrap your entire response in a markdown code block (no triple backticks ``` or ```markdown). Respond with raw text directly.
 
 User Question: {user_query}
@@ -214,7 +215,7 @@ JSON Output:"""
 
 PARAMETER_EXTRACTION_PROMPT = """You are a strict parameter extractor for an enterprise ERP system.
 
-Given a user query and a parameter schema, extract ONLY the parameters that are clearly present in the query.
+Given a user query and a parameter schema, extract ONLY the parameters that are clearly and explicitly present in the query.
 
 Rules:
 - Only extract parameters defined in the schema.
@@ -223,6 +224,8 @@ Rules:
 - For dates, return one of the following keywords if mentioned: today, yesterday, tomorrow, this week, last week, this month, last month, this year, last year. Or return an ISO date (YYYY-MM-DD) if a specific date is mentioned.
 - For booleans, return true or false.
 - If a parameter is NOT mentioned in the query, do NOT include it in the JSON.
+- CRITICAL: Do NOT extract generic intent-triggering phrases or command verbs (e.g. "I want to create a ticket", "raise a support ticket", "submit suggestion") as the "description" or "feedback" parameters. These are triggers, not actual descriptions or feedback content. Leave them out of the JSON if no real issue description is given.
+- CRITICAL: Do NOT extract generic nouns like "support" as the "app_name" parameter unless the user explicitly names the application (e.g. "app_name: erp_support" or "for erp_support app").
 - Return valid JSON only. No explanation, no comments, no markdown formatting.
 
 Few-Shot Examples:
@@ -245,20 +248,43 @@ Output:
 }}
 
 Example 2:
-Query: "I found a red laptop charger in the conference room yesterday"
+Query: "I need to create a support ticket"
 Schema:
 {{
-  "item_name": "string",
-  "found_location": "string",
-  "found_date": "date",
-  "found_description": "string"
+  "app_name": ["Food and Beverages", "ERP Support", "Fleet Management"],
+  "priority": ["Low", "Medium", "High"],
+  "description": "string"
+}}
+Output:
+{{}}
+
+Example 3:
+Query: "Adding a night-mode theme in Fleet management would significantly reduce eye strain."
+Schema:
+{{
+  "app_name": ["Food and Beverages", "ERP Support", "Fleet Management"],
+  "feedback": "string",
+  "helps": "string"
 }}
 Output:
 {{
-  "item_name": "Laptop Charger",
-  "found_location": "conference room",
-  "found_date": "yesterday",
-  "found_description": "red laptop charger"
+  "app_name": "Fleet Management",
+  "feedback": "Adding a night-mode theme",
+  "helps": "significantly reduce eye strain"
+}}
+
+Example 4:
+Query: "I am facing a loading lag issue in Fleet Management."
+Schema:
+{{
+  "app_name": ["Food and Beverages", "ERP Support", "Fleet Management"],
+  "priority": ["Low", "Medium", "High"],
+  "description": "string"
+}}
+Output:
+{{
+  "app_name": "Fleet Management",
+  "description": "loading lag issue"
 }}
 
 Now perform the extraction:

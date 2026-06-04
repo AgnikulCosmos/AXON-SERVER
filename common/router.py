@@ -150,7 +150,93 @@ async def route_query(query: str) -> str:
     return await get_intelligent_route(query)
 
 
+def heuristic_classify(query: str) -> str | None:
+    q = query.lower().strip()
+    
+    # Check for prefix IDs or tracking patterns for track_request
+    track_patterns = [
+        r'\btrack\s+request\b',
+        r'\bstatus\s+of\b',
+        r'\bcheck\s+ticket\b',
+        r'\bview\s+details\b',
+    ]
+    prefixes = ["pc-", "mm-", "mt-", "dl-", "erp_i_", "erp-sf-", "fbsg-", "sug-", "erp-ru-", "erp-faq-", "erp-m-"]
+    has_prefix = any(p in q for p in prefixes)
+    has_track_pattern = any(re.search(pat, q) for pat in track_patterns)
+    if has_prefix or q.startswith("track request"):
+        return "track_request"
+
+    # lost_found_list
+    lost_found_list_patterns = [
+        "show lost and found", "view lost items", "list lost", "lost and found items", 
+        "lost & found items", "show lost items", "show found items", "view lost and found",
+        "list found items", "show found ones"
+    ]
+    if any(pat in q for pat in lost_found_list_patterns):
+        return "lost_found_list"
+
+    # lost_found_create
+    lost_found_create_patterns = [
+        "lost my", "found a", "report lost", "register a found", "reported lost", "reported found",
+        "mark as found", "mark found", "mark lf-"
+    ]
+    if any(pat in q for pat in lost_found_create_patterns) or "lf-" in q or q.startswith("mark "):
+        return "lost_found_create"
+
+    # erp_feedback_create
+    feedback_patterns = [
+        "submit feedback", "give feedback", "leave feedback", "give a feedback", 
+        "leave my feedback", "i want to submit feedback", "i want to give feedback", "feedback:"
+    ]
+    if any(pat in q for pat in feedback_patterns):
+        return "erp_feedback_create"
+
+    # erp_suggestion_create
+    suggestion_patterns = [
+        "submit suggestion", "submit a suggestion", "have a suggestion", "leave suggestion", 
+        "suggestion:", "improve something", "enhancement request"
+    ]
+    if any(pat in q for pat in suggestion_patterns):
+        return "erp_suggestion_create"
+
+    # erp_tickets_list
+    tickets_list_patterns = [
+        "my tickets", "show tickets", "view my support tickets", "view support tickets", 
+        "list my support tickets", "list support tickets", "list tickets", "show my tickets"
+    ]
+    if any(pat in q for pat in tickets_list_patterns):
+        return "erp_tickets_list"
+
+    # erp_tickets_create
+    tickets_create_patterns = [
+        "raise a ticket", "create support ticket", "submit ticket", "open a support request", 
+        "raise a p0", "raise a p1", "raise a p2", "create a p0", "create a p1", "create a p2", 
+        "lodge a p0", "lodge a p1", "lodge a p2", "raise a support ticket", "create a support ticket", 
+        "lodge a support ticket", "facing a loading lag", "report an issue with", "raise a critical ticket",
+        "open a support ticket"
+    ]
+    if any(pat in q for pat in tickets_create_patterns):
+        return "erp_tickets_create"
+
+    # food_log_list
+    food_log_patterns = [
+        "food log", "meal log", "food logs", "meal logs", "book food", "book lunch", "book dinner", 
+        "book breakfast", "canteen food bookings", "meal requests", "did i book food", "book food yesterday",
+        "food log for today", "did i book lunch"
+    ]
+    if any(pat in q for pat in food_log_patterns):
+        return "food_log_list"
+
+    return None
+
+
 async def get_intelligent_route(query: str) -> str:
+    # 1. Run deterministic Python-based heuristic classifier first
+    h_category = heuristic_classify(query)
+    if h_category:
+        logger.info(f"[Semantic Router] Query: {query!r} routed to ERP route: {h_category} by heuristics")
+        return f"ERP_ROUTE:{h_category}"
+
     prompt = CLASSIFICATION_PROMPT.format(query=query)
 
     try:
