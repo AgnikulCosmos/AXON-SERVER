@@ -15,7 +15,7 @@ services:
       - ollama
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
-      FRAPPE_URL: http://host.docker.internal:8000
+      FRAPPE_URL: http://host.docker.internal
       FRAPPE_TIMEOUT: 120
     extra_hosts:
       - "host.docker.internal:host-gateway"
