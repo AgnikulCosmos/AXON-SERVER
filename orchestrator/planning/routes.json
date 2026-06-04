@@ -976,13 +976,17 @@
   },
   {
     "route_name": "track_request",
-    "description": "Track a request status or view details of any request, ticket, task, or record by ID prefix.",
+    "description": "Track a request status or view details of any ERP support ticket, feedback, suggestion, or food log record by its reference ID. Use this when the user provides a known ID like ERP_I_xxx, ERP-SF-xx-xxxx, or a food request ID.",
     "examples": [
       "track request PC-2026-0001",
       "status of MM-2026-0003",
       "check ticket ERP_I_9876",
       "what is the status of MT-2026-0005?",
-      "view details of my request PC-06-26-1024"
+      "view details of my request PC-06-26-1024",
+      "track ERP-SF-06-0034",
+      "check status of feedback ERP-SF-06-0010",
+      "what is the status of my ERP ticket ERP_I_14",
+      "show me details of ERP-SF-06-0033"
     ],
     "doctype": "",
     "frappe_method": "",
