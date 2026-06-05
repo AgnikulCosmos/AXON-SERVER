@@ -5,12 +5,16 @@ from contextvars import ContextVar
 import requests
 from requests import HTTPError
 
-FRAPPE_URL = os.getenv("FRAPPE_URL", "http://localhost:8000")
 FRAPPE_TIMEOUT = int(os.getenv("FRAPPE_TIMEOUT", "30"))
 _frappe_request_headers: ContextVar[dict | None] = ContextVar(
     "frappe_request_headers",
     default=None,
 )
+
+
+def _get_frappe_url() -> str:
+    """Read FRAPPE_URL dynamically so hot-reloads and env overrides are respected."""
+    return os.getenv("FRAPPE_URL", "http://localhost:8000").rstrip("/")
 
 
 def set_frappe_request_headers(headers: dict | None):
@@ -26,20 +30,35 @@ def call_frappe(tool_call: dict):
     arguments = tool_call.get("arguments", {})
     http_method = tool_call.get("http_method", "POST").upper()
 
-    url = f"{FRAPPE_URL}/api/method/{method}"
+    frappe_url = _get_frappe_url()
+    url = f"{frappe_url}/api/method/{method}"
 
     API_KEY = os.getenv("FRAPPE_API_KEY")
     API_SECRET = os.getenv("FRAPPE_API_SECRET")
 
+    # Build headers from forwarded employee session (cookie + CSRF)
     headers = dict(_frappe_request_headers.get() or {})
-    if not headers and API_KEY and API_SECRET:
+
+    # Auth priority:
+    # 1. Forwarded employee session (cookie + CSRF token) — preferred for test/prod
+    # 2. API key/secret — only used when no session headers are available
+    has_session = _has_header(headers, "cookie") or _has_header(headers, "authorization")
+    if not has_session and API_KEY and API_SECRET:
         headers["Authorization"] = f"token {API_KEY}:{API_SECRET}"
 
     auth_debug = _auth_debug(headers)
 
     if http_method in {"POST", "PUT", "DELETE"}:
-        csrf_added = _ensure_csrf_header(headers)
-        auth_debug["csrf_added_by_axon"] = csrf_added
+        # Only fetch CSRF when using cookie-based session auth (not API key)
+        using_api_key = (
+            _has_header(headers, "authorization")
+            and not _has_header(headers, "cookie")
+        )
+        if not using_api_key:
+            csrf_added = _ensure_csrf_header(headers, frappe_url)
+            auth_debug["csrf_added_by_axon"] = csrf_added
+        else:
+            auth_debug["csrf_added_by_axon"] = False
         auth_debug["has_csrf_header"] = _has_header(headers, "x-frappe-csrf-token")
 
     if http_method == "GET":
@@ -65,25 +84,31 @@ def call_frappe(tool_call: dict):
     return response.json()
 
 
-def _ensure_csrf_header(headers: dict) -> bool:
+def _ensure_csrf_header(headers: dict, frappe_url: str | None = None) -> bool:
+    """Fetch and inject CSRF token if not already present and a session cookie exists."""
     if _has_header(headers, "x-frappe-csrf-token"):
-        return False
+        return False  # Already present — skip fetch
 
     cookie = _get_header(headers, "cookie")
     if not cookie:
-        return False
+        return False  # No session cookie — cannot fetch CSRF
 
-    response = requests.get(
-        f"{FRAPPE_URL}/api/method/axon.api.get_current_user",
-        headers={key: value for key, value in headers.items() if key.lower() != "x-frappe-csrf-token"},
-        timeout=FRAPPE_TIMEOUT,
-    )
-    response.raise_for_status()
-
-    token = response.json().get("message", {}).get("csrf_token")
-    if token:
-        headers["X-Frappe-CSRF-Token"] = token
-        return True
+    base_url = frappe_url or _get_frappe_url()
+    try:
+        response = requests.get(
+            f"{base_url}/api/method/axon.api.get_current_user",
+            headers={key: value for key, value in headers.items() if key.lower() != "x-frappe-csrf-token"},
+            timeout=FRAPPE_TIMEOUT,
+        )
+        response.raise_for_status()
+        token = response.json().get("message", {}).get("csrf_token")
+        if token:
+            headers["X-Frappe-CSRF-Token"] = token
+            return True
+    except Exception:
+        # Non-fatal — the request will proceed without CSRF and Frappe will reject
+        # mutating calls if CSRF is truly required. This avoids masking the real error.
+        pass
     return False
 
 def _has_header(headers: dict, name: str) -> bool:

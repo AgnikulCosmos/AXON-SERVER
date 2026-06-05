@@ -19,12 +19,9 @@ dist/
 *.log
 logs/
 
-# Local environment files
+# Environment files — all real env files are ignored; only the template is tracked
 .env
 .env.*
-!.env.local
-!.env.test
-!.env.prod
 !.env.example
 
 # ===== Node / Next.js =====

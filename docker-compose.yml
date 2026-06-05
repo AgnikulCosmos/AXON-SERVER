@@ -15,7 +15,8 @@ services:
       - ollama
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
-      FRAPPE_URL: ${FRAPPE_URL:-http://14.99.126.171}
+      # FRAPPE_URL is NOT set here — config_loader.py reads it from .env / .env.{APP_ENV}
+      # which are mounted via the volume below. This prevents shell-env leakage.
       FRAPPE_TIMEOUT: 120
     extra_hosts:
       - "host.docker.internal:host-gateway"
