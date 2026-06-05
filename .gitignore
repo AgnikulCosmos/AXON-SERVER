@@ -19,10 +19,12 @@ dist/
 *.log
 logs/
 
-# Environment files — all real env files are ignored; only the template is tracked
-.env
-.env.*
-!.env.example
+# Environment files
+.env          # machine-local: APP_ENV selector (create this per machine)
+.env.local    # machine-local: local dev overrides
+!.env.test    # tracked: test server URLs (no secrets)
+!.env.prod    # tracked: prod server URLs (no secrets)
+!.env.example # tracked: template for new developers
 
 # ===== Node / Next.js =====
 node_modules/
