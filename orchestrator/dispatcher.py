@@ -229,8 +229,8 @@ def _save_pending(data: dict) -> None:
     try:
         with open(_PENDING_FILE, "w") as _f:
             _json.dump(data, _f)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error(f"Failed to save pending sessions: {e}")
 
 
 class _PersistentDict:

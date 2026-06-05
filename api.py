@@ -1,3 +1,4 @@
+import common.config_loader
 import os
 import uuid
 import asyncio
@@ -116,6 +117,7 @@ def extract_final_text(agent_output: str) -> str:
 async def query_endpoint(req: QueryRequest, request: Request):
     """Non-streaming query endpoint."""
     question = req.normalized_query()
+    print(f"[API Log] Received session_id: {req.session_id}")
     if not question:
         raise HTTPException(status_code=400, detail="`query` must be a non-empty string.")
 

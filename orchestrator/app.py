@@ -1,3 +1,4 @@
+import common.config_loader
 from fastapi import FastAPI, Request, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -133,6 +134,9 @@ def frappe_headers_from_request(request: Request) -> dict:
 
 @app.post("/v1/query")
 async def query_api(req: QueryRequest, request: Request):
+    import logging
+    logger = logging.getLogger("orchestrator")
+    logger.info(f"[API Log] Received query request. query: {req.normalized_query()!r}, session_id: {req.session_id!r}")
     question = req.normalized_query()
     if not question:
         raise HTTPException(status_code=400, detail="`query` must be a non-empty string.")

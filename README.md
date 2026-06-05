@@ -610,11 +610,19 @@ FastAPI provides an interactive Swagger UI documentation at:
 
 | Variable | Default Value | Description |
 | :--- | :--- | :--- |
+| `APP_ENV` | `local` | Environment deployment target: `local`, `test`, or `prod` |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | URL of the Ollama server hosting Qwen and mxbai |
-| `FRAPPE_URL` | `http://localhost:8000` | URL of the local Frappe instance |
+| `FRAPPE_URL` | *Loaded dynamically* | URL of the Frappe instance, resolved based on `APP_ENV` |
 | `WIKI_URL` | `http://localhost:8002/query` | Wikipedia query service port |
 | `ARXIV_URL` | `http://localhost:8003/query` | arXiv academic query service port |
 | `DDGS_URL` | `http://localhost:8005/query` | DuckDuckGo web search service port |
+
+### Multi-Environment Configurations
+
+The system dynamically loads configuration files based on the `APP_ENV` variable set in the main `.env` file:
+* **Local Development (`APP_ENV=local`)**: Loads `.env.local` containing `FRAPPE_URL=http://host.docker.internal:8000`
+* **Test Server (`APP_ENV=test`)**: Loads `.env.test` containing `FRAPPE_URL=http://14.99.126.171`
+* **Production Server (`APP_ENV=prod`)**: Loads `.env.prod` containing `FRAPPE_URL=https://erp.agnikul.in`
 
 ---
 
@@ -639,5 +647,5 @@ FastAPI provides an interactive Swagger UI documentation at:
 ---
 
 **Version:** 1.1  
-**Last Updated:** 29 May 2026  
+**Last Updated:** 5 June 2026  
 **Status:** Production Ready & Optimized
