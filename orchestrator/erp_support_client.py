@@ -91,31 +91,37 @@ def _normalize_app_name(user_input: str) -> Optional[str]:
     if not user_input:
         return None
     
+    import re
+    def clean_str(s: str) -> str:
+        return re.sub(r'[^a-z0-9]', '', s.lower())
+
+    user_input_clean = clean_str(user_input)
     user_input_lower = user_input.strip().lower()
     valid_names = _get_valid_app_names()
     
-    # First, try exact match (case-insensitive)
+    # First, try exact match (case-insensitive, ignoring spaces/punctuation)
     for name in valid_names:
-        if name.lower() == user_input_lower:
+        if clean_str(name) == user_input_clean:
             return name
     
     # Second, try alias mapping from APP_NAME_MAPPING
     from orchestrator.planning.parameter_extractor import APP_NAME_MAPPING
     for canonical, aliases in APP_NAME_MAPPING.items():
-        if user_input_lower == canonical.lower():
-            # Check if canonical exists in valid_names
+        canonical_clean = clean_str(canonical)
+        if user_input_clean == canonical_clean:
             for valid in valid_names:
-                if valid.lower() == canonical.lower():
+                if clean_str(valid) == canonical_clean:
                     return valid
         for alias in aliases:
-            if user_input_lower == alias.lower():
+            if user_input_clean == clean_str(alias):
                 for valid in valid_names:
-                    if valid.lower() == canonical.lower():
+                    if clean_str(valid) == canonical_clean:
                         return valid
     
     # Third, try partial matching (e.g., "Fleet" matches "Fleet Management")
     for name in valid_names:
-        if user_input_lower in name.lower() or name.lower() in user_input_lower:
+        name_clean = clean_str(name)
+        if user_input_clean in name_clean or name_clean in user_input_clean:
             return name
     
     return None

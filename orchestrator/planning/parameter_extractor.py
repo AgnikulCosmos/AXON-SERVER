@@ -89,13 +89,13 @@ def _build_app_name_mapping():
 
     # Fallback: hardcoded mapping with correct app_name values
     return {
-        "core": ["core", "core erp", "agnikul core", "agnikul core erp"],
-        "erp_support": ["erp_support", "erp support", "support", "erp"],
-        "fleet_management": ["fleet_management", "fleet management", "fleet", "fleet mgmt"],
-        "food": ["food", "food booking", "food and beverages", "food & beverages", "canteen", "meals"],
-        "hr_operations": ["hr_operations", "hr operations", "hr", "human resources", "hr ops"],
-        "maintenance_management": ["maintenance_management", "maintenance management", "maintenance", "maintenance mgmt"],
-        "packaging_management": ["packaging_management", "packaging management", "packaging", "packaging mgmt"],
+        "Agnikul Core ERP": ["core", "core erp", "agnikul core", "agnikul core erp"],
+        "ERP Support": ["erp_support", "erp support", "support", "erp"],
+        "Fleet Management": ["fleet_management", "fleet management", "fleet", "fleet mgmt"],
+        "Food and Beverages": ["food", "food booking", "food and beverages", "food & beverages", "canteen", "meals"],
+        "HR Operations": ["hr_operations", "hr operations", "hr", "human resources", "hr ops"],
+        "Maintenance Management": ["maintenance_management", "maintenance management", "maintenance", "maintenance mgmt"],
+        "Packaging Management": ["packaging_management", "packaging management", "packaging", "packaging mgmt"],
     }
 
 
@@ -411,6 +411,7 @@ def _erp_support_extract(query: str, route_config: dict, schema: dict) -> dict:
             r"\bfor\s+([A-Za-z0-9_& .-]+?)\s+app(?:lication)?\b",
         ],
         "module": [
+            r"\b(?:in|on|for|the|at|^)\s*([A-Za-z0-9_& -]{2,20})\s+module\b",
             r"\bmodule\s*[:=]\s*([A-Za-z0-9_& .-]+?)(?=,|\s+priority\b|\s+description\b|\s+issue\b|$)",
             r"\bmodule\s+([A-Za-z0-9_& .-]+?)(?=,|\s+priority\b|\s+description\b|\s+issue\b|$)",
         ],
