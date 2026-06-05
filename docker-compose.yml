@@ -46,7 +46,7 @@ services:
     image: ollama/ollama:latest
     volumes:
       - /usr/share/ollama/.ollama:/root/.ollama
-      - /home/harinit-automation/Documents/axon_5.6:/models/axon_5.6:ro
+      - ${OLLAMA_MODEL_PATH}:/models/axon_5.6:ro
     restart: unless-stopped
 
 volumes:
