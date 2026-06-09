@@ -67,13 +67,13 @@ sequenceDiagram
         Frappe-->>AxonServer: 4a. DocType Created (e.g. ERP-SF-05-0004)
         AxonServer-->>User: 5a. Return Success Details & Ref ID
     
-    elif Organization Query
+    else Organization Query
         AxonServer->>LocalDB: 3b. Retrieve Embeddings & Context
         LocalDB-->>AxonServer: 4b. Match relevant policy blocks
         Note over AxonServer: Summarize & Phrase with LLM (Qwen)
         AxonServer-->>User: 5b. Return Natural Concise Answer
 
-    elif External Search (wiki, arXiv, ddgs)
+    else External Search (wiki, arXiv, ddgs)
         Note over AxonServer: Cleans query terms (removes timing terms like "recent")
         AxonServer->>SearchService: 3c. Non-blocking HTTP fetch (asyncio.to_thread)
         SearchService-->>AxonServer: 4c. Search results
@@ -92,6 +92,24 @@ sequenceDiagram
      * **Organization queries** perform a Chroma similarity search on the custom local database (`chroma_langchain_db_user_local`) and use Qwen to format a natural answer.
      * **External search requests** trigger Wikipedia (`wiki`), academic paper (`arxiv`), or DuckDuckGo (`ddgs`) lookups inside worker threads via `asyncio.to_thread`, preventing main event loop blocking.
 4. **Hop 4 (Secure Execution):** When executing ERP actions, AXON-SERVER calls the Frappe API endpoint (`erp_support.put_api.create`) using the cached active user's session cookies and CSRF token, ensuring the database records are created under the correct user credentials.
+
+### 📋 Example Queries & Mapping to Backend APIs
+
+To clarify the relationship between user queries and the actual API endpoints invoked, the table below maps typical user queries to their resolved routes and corresponding Frappe API functions:
+
+| User Query | Intent / Route Category | Target/Backend API | Endpoint / Method | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `"Raise a critical ticket for app Finance module Accounts. Payments are failing."` | **ERP Write (Creation)** | `erp_support.put_api.create` | `POST` | Creates a new support ticket (`ERP_Tickets`) on behalf of the user. |
+| `"Give feedback for app HR saying system is great. Rating 5."` | **ERP Write (Creation)** | `erp_support.put_api.create` | `POST` | Creates a feedback entry (`ERP_Feedback_Suggestions`). |
+| `"Suggest an improvement for app Payroll. Add dark mode."` | **ERP Write (Creation)** | `erp_support.put_api.create` | `POST` | Creates a suggestion entry (`ERP_Feedback_Suggestions`). |
+| `"I lost my blue access card in the cafeteria."` | **ERP Write (Creation)** | `axon.api.create_lost_found` | `POST` | Creates a lost & found report record. |
+| `"Show my support tickets"` | **ERP Read (Query)** | `erp_support.get_api.get_tickets` | `GET` | Retrieves tickets submitted by the logged-in employee. |
+| `"List my suggestions and feedback"` | **ERP Read (Query)** | `erp_support.get_api.get_fb_sg` | `GET` | Retrieves feedback/suggestions submitted by the user. |
+| `"Show active lost and found items"` | **ERP Read (Query)** | `core.factory.api.get_data` | `GET` | Retrieves active lost/found listings. |
+| `"Track status of ticket PC-2026-0001"` | **ERP Read (Query)** | `packaging_management.get_api.view_details` (or prefix-specific helper) | `GET` | Views details of a specific record by prefix. |
+| `"Show my meal bookings for this week"` | **ERP Read (Query)** | `food.api.log.food_log` | `GET` | Retrieves canteen booking history for a user. |
+| `"What is the sick leave policy?"` | **Internal RAG** | Chroma DB / `dataset.json` | Local RAG Pipeline | Retrieves company leave guidelines from Vector DB. |
+| `"Search Wikipedia for Machine Learning"` | **External Search** | Wikipedia Service Container | `POST` | Dispatches search query to external wiki service. |
 
 ---
 
