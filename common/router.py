@@ -41,16 +41,6 @@ INTENT_TO_ROUTE = {
     "GENERAL": "QWEN",
     "TOOLS": "TOOLS"
 }
-async def route_query(query: str) -> str:
-    # Check profanity first
-    if contains_profanity(query):
-        return "PROFANITY"
-    
-    # Check greeting before LLM router
-    if is_greeting(query):
-        return f"GREETING_RESPONSE:{get_greeting_response()}"
-
-    route = await get_intelligent_route(query)
 
 async def route_query(query: str) -> str:
     # Check profanity first
