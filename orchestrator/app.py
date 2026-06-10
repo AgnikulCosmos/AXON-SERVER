@@ -12,6 +12,38 @@ import uuid
 from pathlib import Path
 from io import StringIO
 import httpx
+import contextvars
+
+task_stdout = contextvars.ContextVar("task_stdout", default=None)
+
+class TaskLocalStdout:
+    def write(self, data):
+        buf = task_stdout.get()
+        if buf is not None:
+            buf.write(data)
+        else:
+            sys.__stdout__.write(data)
+
+    def flush(self):
+        buf = task_stdout.get()
+        if buf is not None:
+            buf.flush()
+        else:
+            sys.__stdout__.flush()
+
+    def isatty(self):
+        return sys.__stdout__.isatty()
+
+    @property
+    def encoding(self):
+        return sys.__stdout__.encoding
+
+    @property
+    def errors(self):
+        return sys.__stdout__.errors
+
+# Install proxy globally
+sys.stdout = TaskLocalStdout()
 
 from orchestrator.dispatcher import run_agent
 from orchestrator.agent import (
@@ -318,9 +350,8 @@ async def stream_query(request: Request):
 
     async def event_generator():
 
-        old_stdout = sys.stdout
         captured_output = StringIO()
-        sys.stdout = captured_output
+        token = task_stdout.set(captured_output)
 
         last_pos = 0
         current_section = None
@@ -437,7 +468,7 @@ async def stream_query(request: Request):
             yield sse_event(f"Error: {str(e)}", "error")
 
         finally:
-            sys.stdout = old_stdout
+            task_stdout.reset(token)
 
     return StreamingResponse(
         event_generator(),

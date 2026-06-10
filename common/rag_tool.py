@@ -199,12 +199,31 @@ def rag_search(query: str) -> str:
     # Match user query against stored `questions` field in dataset.
     # Uses token-overlap (Jaccard) — robust against wording variations.
     _stop = {
-        "is", "are", "was",
+        "is", "are", "was", "how", "what", "why", "who", "where", "when",
         "the", "a", "an", "tell", "me", "about", "does", "do", "did",
         "has", "have", "had", "for", "of", "in", "on", "at", "to", "its",
         "their", "they", "i", "my", "can", "will", "would", "please", "any"
     }
     q_tokens = set(w for w in re.findall(r"\b[a-z0-9]+\b", query_lower) if w not in _stop and len(w) > 2)
+
+    _DOMAINS = {
+        "leave": {"leave", "leaves", "holiday", "holidays", "sick", "casual", "maternity", "paternity"},
+        "cad": {"cad", "dfr", "rig", "vehicle", "design"},
+        "manufacturing": {"manufacturing"},
+        "instrumentation": {"instrumentation"},
+        "visitor": {"visitor", "visitors"},
+        "lost_found": {"lost", "found"},
+        "ticket": {"ticket", "tickets"},
+        "feedback": {"feedback", "review", "rate", "rating"},
+        "suggestion": {"suggestion", "suggestions"},
+        "food": {"food", "canteen", "meal", "meals", "breakfast", "lunch", "dinner"},
+        "fleet": {"cabs", "cab", "ride", "rides", "fleet", "commute", "driver"}
+    }
+    query_domains = set()
+    for token in q_tokens:
+        for domain_name, keywords in _DOMAINS.items():
+            if token in keywords:
+                query_domains.add(domain_name)
 
     if q_tokens:
         best_score = 0.0
@@ -217,6 +236,17 @@ def rag_search(query: str) -> str:
 
             # Score against each stored question
             for stored_q in stored_qs:
+                # Domain match validation
+                if query_domains:
+                    domain_ok = False
+                    text_lower = stored_q.lower()
+                    for dom in query_domains:
+                        if any(kw in text_lower for kw in _DOMAINS[dom]):
+                            domain_ok = True
+                            break
+                    if not domain_ok:
+                        continue
+
                 sq_tokens = set(w for w in re.findall(r"\b[a-z0-9]+\b", stored_q.lower()) if w not in _stop and len(w) > 2)
                 if not sq_tokens:
                     continue
@@ -229,6 +259,16 @@ def rag_search(query: str) -> str:
                     best_content = content
 
             # Also score against title (slight discount)
+            # Domain match validation for title
+            if query_domains:
+                domain_ok = False
+                for dom in query_domains:
+                    if any(kw in title for kw in _DOMAINS[dom]):
+                        domain_ok = True
+                        break
+                if not domain_ok:
+                    continue
+
             title_tokens = set(w for w in re.findall(r"\b[a-z0-9]+\b", title) if w not in _stop and len(w) > 2)
             if title_tokens:
                 overlap = len(q_tokens & title_tokens)

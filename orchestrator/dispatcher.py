@@ -203,6 +203,56 @@ async def _get_friendly_missing_fields_message(fields: list[str], route_name: st
     return "\n\n".join(lines)
 
 
+def is_how_to_query(query: str) -> bool:
+    q = query.lower().strip("!?., ")
+    how_indicators = [
+        "how to", "how do i", "how can i", "how should i", "how does", "how do we", "how is",
+        "steps to", "procedure to", "guideline for", "guide to", "how do we go about",
+        "steps for", "instruction for", "instructions for", "how do we do"
+    ]
+    return any(indicator in q for indicator in how_indicators)
+
+ERP_INSTRUCTIONAL_GUIDES = {
+    "lost_found_create": (
+        "To report a lost or found item, you can tell me what you lost or found. "
+        "I will ask for details such as the item name, a description, the location where it was lost or found, and the date. "
+        "Once you provide these details, I will register it in the Lost and Found system for tracking."
+    ),
+    "lost_found_list": (
+        "To view reported lost and found items, you can say 'show lost and found items' or 'view lost items'. "
+        "I will retrieve the list of currently active reported items in the system."
+    ),
+    "erp_tickets_create": (
+        "To raise an ERP support ticket, you can say 'raise a ticket' or 'create a support ticket'. "
+        "I will ask you for details including the application name (e.g., Fleet Management, HR Operations), "
+        "the priority level (P0 to P3), and a description of the issue. "
+        "Once you provide these details, I will submit the support request."
+    ),
+    "erp_tickets_list": (
+        "To view your support tickets, you can say 'show my tickets' or 'list my support tickets'. "
+        "I will fetch and display a list of all tickets associated with your account."
+    ),
+    "erp_feedback_create": (
+        "To submit feedback for an ERP application, you can say 'submit feedback'. "
+        "I will ask for the application name, your feedback description, and a rating from 1 to 5 stars. "
+        "Once provided, your feedback will be registered in the system."
+    ),
+    "erp_suggestion_create": (
+        "To submit a suggestion for improving an ERP application, you can say 'submit a suggestion'. "
+        "I will ask for the application name, a description of the suggestion, how it helps, and priority (Low, Medium, High). "
+        "I will then submit your suggestion."
+    ),
+    "track_request": (
+        "To track a request's status, you can say 'track request' followed by the request ID "
+        "(e.g., PC-2026-0001 or MM-2026-0003). I will look up the current status and assignee for you."
+    ),
+    "food_log_list": (
+        "To check your meal bookings or consumption logs, you can say 'show my food logs' or ask "
+        "questions like 'did I book lunch today?'. I will check the records in the canteen desk."
+    )
+}
+
+
 async def run_agent(query: str, frappe_headers: dict | None = None, session_id: str | None = None):
     header_token = set_frappe_request_headers(frappe_headers)
     try:
@@ -423,6 +473,31 @@ async def _run_agent(query: str, session_id: str | None = None):
 
     q = query.lower().strip("!?.,")
     logger.debug(f"[Session Tracking] Query: {query!r}, session_id: {session_id!r}, in_pending: {session_id in PENDING_ERP_SESSIONS if session_id else False}")
+
+    # Check for how-to query guidance
+    if is_how_to_query(query):
+        # 1. Search knowledge base
+        rag_res = rag_search(query)
+        if rag_res and "don't have that information" not in rag_res.lower() and "do not have that information" not in rag_res.lower():
+            rag_res = sanitize_or_block_response(rag_res)
+            sys.stdout.write(f"{MARKER_FINAL_START}\n")
+            await stream_text_word_by_word(rag_res)
+            sys.stdout.write(f"{MARKER_FINAL_END}\n")
+            sys.stdout.flush()
+            return rag_res
+
+        # 2. Check if query maps to an ERP route
+        matched_route = await route_query(query)
+        if matched_route and matched_route.startswith("ERP_ROUTE:"):
+            route_name = matched_route.split(":", 1)[1]
+            guide = ERP_INSTRUCTIONAL_GUIDES.get(route_name)
+            if guide:
+                guide = sanitize_or_block_response(guide)
+                sys.stdout.write(f"{MARKER_FINAL_START}\n")
+                await stream_text_word_by_word(guide)
+                sys.stdout.write(f"{MARKER_FINAL_END}\n")
+                sys.stdout.flush()
+                return guide
 
     # ── Check for pending ERP session ──────────────────────────────
     if session_id and session_id in PENDING_ERP_SESSIONS:
