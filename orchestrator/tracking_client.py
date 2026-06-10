@@ -351,30 +351,32 @@ def execute_leave_tracker_query(params: dict) -> dict[str, Any]:
 
 
 def _format_leave_tracker(counts: dict) -> str:
-    if not counts:
-        return "No leave tracker records found for your account."
-    
+    # If the counts is the wrapped response containing "leave_balances" (new API)
+    if isinstance(counts, dict) and "leave_balances" in counts:
+        balances = counts["leave_balances"] or {}
+    else:
+        balances = counts or {}
+
+    # Find Casual & Sick Leave / Casual/Sick Leave
+    casual_sick_info = None
+    for key, info in balances.items():
+        if key in ("Casual & Sick Leave", "Casual/Sick Leave"):
+            casual_sick_info = info
+            break
+
+    if not casual_sick_info or not isinstance(casual_sick_info, dict):
+        return "No Casual & Sick Leave tracker records found for your account."
+
+    taken = casual_sick_info.get("taken", 0.0)
+    # New API uses "available", old uses "balance"
+    remaining = casual_sick_info.get("available") if "available" in casual_sick_info else casual_sick_info.get("balance", 0.0)
+    if remaining is None:
+        remaining = 0.0
+
     md = []
-    md.append(" Leave Balance Summary")
-    md.append("\n| Leave Category | Taken | Remaining Balance |")
-    md.append("| :--- | :---: | :---: |")
+    md.append("### Leave Balance Summary")
+    md.append(f"- **Category**: Casual & Sick Leave")
+    md.append(f"- **Taken**: {taken} days")
+    md.append(f"- **Remaining Balance**: {remaining} days (out of 12)")
     
-    casual_sick_balance = None
-    for leave_type, info in counts.items():
-        if not isinstance(info, dict):
-            continue
-        taken = info.get("taken", 0.0)
-        balance = info.get("balance", 0.0)
-        md.append(f"| {leave_type} | {taken} | {balance} |")
-        
-        if leave_type == "Casual/Sick Leave":
-            casual_sick_balance = balance
-            
-    if casual_sick_balance is not None:
-        md.append(f"\n Casual/Sick Leave Balance: You have {casual_sick_balance} days of Casual/Sick Leave remaining.")
-        if casual_sick_balance > 0:
-            md.append("Yes, you have Casual/Sick Leave available.")
-        else:
-            md.append("No, you do not have any Casual/Sick Leave remaining.")
-            
     return "\n".join(md)

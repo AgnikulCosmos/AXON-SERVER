@@ -238,8 +238,8 @@
       "available casual and sick leaves",
       "what is my casual leave balance"
     ],
-    "doctype": "PR_Leave_Tracker",
-    "frappe_method": "payroll_management.api.leave_counts",
+    "doctype": "Leave Tracker",
+    "frappe_method": "payroll_management.v2.leaves.get_balance",
     "parameters": {
       "year": "string",
       "total_leaves_taken": "number",
