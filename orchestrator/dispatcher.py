@@ -708,7 +708,7 @@ async def _run_agent(query: str, session_id: str | None = None):
             filters = plan.get("filters") or {}
             
             try:
-                if route_name in ("track_request", "food_log_list"):
+                if route_name in ("track_request", "food_log_list", "pr_leave_tracker"):
                     from orchestrator.tracking_client import execute_tracking_plan, format_tracking_response
                     tool_response = execute_tracking_plan(plan)
                     result = format_tracking_response(tool_response)

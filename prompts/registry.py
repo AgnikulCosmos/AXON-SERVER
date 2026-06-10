@@ -170,7 +170,7 @@ Keep the tone warm but professional.
 
 
 CLASSIFICATION_PROMPT = """You are the master intent classifier and router for the AXON enterprise assistant.
-Your task is to classify the user's query into exactly one of the following 10 categories:
+Your task is to classify the user's query into exactly one of the following 11 categories:
 
 1. "lost_found_list": Use this if the user wants to list, show, search, or view existing lost and found items (e.g. "view lost items", "show found ones", "list lost", "lost and found items").
 2. "lost_found_create": Use this if the user wants to report, submit, or record a new lost or found item (e.g. "lost my key", "found a wallet", "report lost item", "mark as found", "register a found item").
@@ -180,8 +180,9 @@ Your task is to classify the user's query into exactly one of the following 10 c
 6. "erp_suggestion_create": Use this if the user wants to give, submit, or leave suggestions or suggestions to improve (e.g. "submit suggestion", "improve something", "enhancement request").
 7. "track_request": Use this if the user wants to track status, check request details, or look up any ticket, request, record, manual, or FAQ by a prefix ID like PC-, MM-, MT-, DL-, ERP_I_, ERP-SF-, FBSG-, SUG-, ERP-RU-, ERP-FAQ-, or ERP-M- (e.g. "track request PC-2026-0001", "status of MM-2026-0003", "check ticket ERP_I_9876", "view details of my request PC-06-26-1024").
 8. "food_log_list": Use this if the user wants to list, view, or check food/meal booking logs, canteen log history, or meal requests for themselves or a team (e.g. "show my food log", "what did I book for lunch today?", "check my canteen food bookings for this week", "list my meal requests from yesterday to today").
-9. "RAG": Use this if the user is asking about Agnikul Cosmos company details, its founders, milestones, launches, vehicles (Agnibaan, Agnilet), or internal corporate or HR policies (leaves, holidays, canteen menu, dress code, reimbursements).
-10. "TOOLS": Use this for general rocketry concepts, general science, external lookups, general world knowledge, or external web search (e.g., "what is a rocket engine", "how does a rocket launch", "weather in chennai").
+9. "pr_leave_tracker": Use this if the user wants to check their leave balances, how many leaves they have left, how many leaves they have taken, or see their leave tracker summary (e.g. "show my leave balance", "how many casual leaves do I have left", "check my sick leave balance", "available casual and sick leaves", "what is my casual leave balance").
+10. "RAG": Use this if the user is asking about Agnikul Cosmos company details, its founders, milestones, launches, vehicles (Agnibaan, Agnilet), or internal corporate or HR policies (leaves, holidays, canteen menu, dress code, reimbursements).
+11. "TOOLS": Use this for general rocketry concepts, general science, external lookups, general world knowledge, or external web search (e.g., "what is a rocket engine", "how does a rocket launch", "weather in chennai").
 
 Few-Shot Examples:
 Query: "show lost and found items" -> Category: "lost_found_list"
@@ -197,6 +198,9 @@ Query: "track request PC-2026-0001" -> Category: "track_request"
 Query: "what is the status of MT-2026-0005?" -> Category: "track_request"
 Query: "show my food log" -> Category: "food_log_list"
 Query: "check my meal bookings for this week" -> Category: "food_log_list"
+Query: "show my leave balance" -> Category: "pr_leave_tracker"
+Query: "how many casual leaves do I have left" -> Category: "pr_leave_tracker"
+Query: "check my sick leave balance" -> Category: "pr_leave_tracker"
 Query: "how many launches has agnikul done?" -> Category: "RAG"
 Query: "tell me about Agnibaan and Agnilet" -> Category: "RAG"
 Query: "what is the casual leave policy?" -> Category: "RAG"
@@ -205,9 +209,9 @@ Query: "how does a rocket launch?" -> Category: "TOOLS"
 Query: "weather in chennai today" -> Category: "TOOLS"
 
 Respond ONLY with a JSON object matching this structure:
-{{
-  "category": "<one of the 10 categories above>"
-}}
+{
+  "category": "<one of the 11 categories above>"
+}
 
 User Query: {query}
 JSON Output:"""

@@ -95,6 +95,15 @@ def get_food_log(
     )
 
 
+def get_pr_leave_tracker_mcp(**kwargs: Any) -> dict:
+    return _call(
+        "payroll_management.api.leave_counts",
+        "GET",
+        kwargs,
+    )
+
+
+
 def list_erp_tickets(
     from_date: str | None = None,
     to_date: str | None = None,
@@ -298,6 +307,13 @@ MCP_REGISTRY: dict[str, MCPTool] = {
         method="food.api.log.food_log",
         http_method="GET",
         handler=get_food_log,
+    ),
+    "pr_leave_tracker": MCPTool(
+        name="pr_leave_tracker",
+        description="Check leave tracker or leave balances for the logged-in user.",
+        method="payroll_management.api.leave_counts",
+        http_method="GET",
+        handler=get_pr_leave_tracker_mcp,
     ),
 }
 

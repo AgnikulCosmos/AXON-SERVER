@@ -225,16 +225,21 @@
   },
   {
     "route_name": "pr_leave_tracker",
-    "description": "check pr leave tracker, view pr leave tracker details, fields include year, total leaves taken, employee id, leave counts, approved leave requests",
+    "description": "check pr leave tracker, view pr leave tracker details, fields include year, total leaves taken, employee id, leave counts, approved leave requests, check casual/sick leave balance, how many leaves remaining",
     "examples": [
       "track my leaves",
       "how many leaves have I taken",
       "show leave tracker",
       "total leaves taken this year",
-      "my leave summary"
+      "my leave summary",
+      "show my leave balance",
+      "how many casual leaves do I have left",
+      "check my sick leave balance",
+      "available casual and sick leaves",
+      "what is my casual leave balance"
     ],
     "doctype": "PR_Leave_Tracker",
-    "frappe_method": "axon.api.get_pr_leave_tracker",
+    "frappe_method": "payroll_management.api.leave_counts",
     "parameters": {
       "year": "string",
       "total_leaves_taken": "number",

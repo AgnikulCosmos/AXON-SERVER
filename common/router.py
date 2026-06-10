@@ -100,7 +100,9 @@ async def route_query(query: str) -> str:
         "track", "status", "details", "food log", "food logs", "meal log", "meal logs",
         "booking", "bookings", "pc-", "mm-", "mt-", "dl-", "erp_i_",
         "food", "canteen", "meal", "meals", "issue", "bug", "error", "lag", "slow", "crash",
-        "fail", "problem", "report", "breakfast", "lunch", "dinner"
+        "fail", "problem", "report", "breakfast", "lunch", "dinner",
+        "leave balance", "leave balances", "leaves left", "leaves remaining",
+        "casual leave", "casual leaves", "sick leave", "sick leaves", "leave tracker", "leaves taken"
     }
     if any(kw in q for kw in _ERP_KEYWORDS):
         return await get_intelligent_route(query)
@@ -152,6 +154,14 @@ async def route_query(query: str) -> str:
 
 def heuristic_classify(query: str) -> str | None:
     q = query.lower().strip()
+    
+    # Check for leave tracker queries
+    leave_tracker_patterns = [
+        "leave balance", "leave balances", "leaves left", "leaves remaining",
+        "casual leave", "casual leaves", "sick leave", "sick leaves", "leave tracker", "leaves taken"
+    ]
+    if any(pat in q for pat in leave_tracker_patterns):
+        return "pr_leave_tracker"
     
     # Check for prefix IDs or tracking patterns for track_request
     track_patterns = [
@@ -249,8 +259,8 @@ async def get_intelligent_route(query: str) -> str:
             data = json.loads(json_match.group(0))
             category = data.get("category")
             
-            # Active 10-class matching:
-            if category in {"lost_found_list", "lost_found_create", "erp_tickets_list", "erp_tickets_create", "erp_feedback_create", "erp_suggestion_create", "track_request", "food_log_list"}:
+            # Active 11-class matching:
+            if category in {"lost_found_list", "lost_found_create", "erp_tickets_list", "erp_tickets_create", "erp_feedback_create", "erp_suggestion_create", "track_request", "food_log_list", "pr_leave_tracker"}:
                 logger.info(f"[Semantic Router] Query: {query!r} routed to ERP route: {category} by Qwen")
                 return f"ERP_ROUTE:{category}"
             elif category in {"RAG", "TOOLS"}:

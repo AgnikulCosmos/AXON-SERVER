@@ -109,7 +109,10 @@ async def process_query(
 def _process_erp_query(query: str) -> dict[str, Any]:
     """Process an ERP Support query and return structured response."""
     plan = router_pipeline.process(query)
-    if not plan or not plan.get("route_name", "").startswith("erp_"):
+    if not plan or not (
+        plan.get("route_name", "").startswith("erp_")
+        or plan.get("route_name") in ("food_log_list", "pr_leave_tracker", "lost_found_list", "lost_found_create", "track_request")
+    ):
         return {
             "query_type": "erp",
             "status": "error",

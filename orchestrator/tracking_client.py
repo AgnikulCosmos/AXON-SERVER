@@ -15,6 +15,9 @@ def execute_tracking_plan(plan: dict) -> dict[str, Any]:
     if route == "food_log_list":
         return execute_food_log_query(params)
         
+    if route == "pr_leave_tracker":
+        return execute_leave_tracker_query(params)
+        
     req_id = params.get("req_id")
     if req_id:
         cleaned = req_id.strip().lower()
@@ -173,6 +176,9 @@ def format_tracking_response(normalized: dict) -> str:
     if normalized.get("type") == "food_log":
         return _format_food_log(normalized["data"], normalized.get("range", ""))
         
+    if normalized.get("type") == "leave_tracker":
+        return _format_leave_tracker(normalized.get("counts", {}))
+        
     # Standard Request Details Formatting
     md = []
     md.append(f"### Request Tracking Details: **{normalized['id']}**")
@@ -325,3 +331,50 @@ def _normalize_erp_support_response(raw_response: dict) -> dict[str, Any]:
         "title": f"ERP Support: {raw.get('name')}",
         "custom_details": customs
     }
+
+
+def execute_leave_tracker_query(params: dict) -> dict[str, Any]:
+    from orchestrator.mcp_registry import get_pr_leave_tracker_mcp
+    try:
+        response = get_pr_leave_tracker_mcp()
+        counts = {}
+        if isinstance(response, dict):
+            counts = response.get("message") or {}
+        
+        return {
+            "status": "ok",
+            "type": "leave_tracker",
+            "counts": counts
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to fetch leave tracker: {str(e)}"}
+
+
+def _format_leave_tracker(counts: dict) -> str:
+    if not counts:
+        return "No leave tracker records found for your account."
+    
+    md = []
+    md.append(" Leave Balance Summary")
+    md.append("\n| Leave Category | Taken | Remaining Balance |")
+    md.append("| :--- | :---: | :---: |")
+    
+    casual_sick_balance = None
+    for leave_type, info in counts.items():
+        if not isinstance(info, dict):
+            continue
+        taken = info.get("taken", 0.0)
+        balance = info.get("balance", 0.0)
+        md.append(f"| {leave_type} | {taken} | {balance} |")
+        
+        if leave_type == "Casual/Sick Leave":
+            casual_sick_balance = balance
+            
+    if casual_sick_balance is not None:
+        md.append(f"\n Casual/Sick Leave Balance: You have {casual_sick_balance} days of Casual/Sick Leave remaining.")
+        if casual_sick_balance > 0:
+            md.append("Yes, you have Casual/Sick Leave available.")
+        else:
+            md.append("No, you do not have any Casual/Sick Leave remaining.")
+            
+    return "\n".join(md)

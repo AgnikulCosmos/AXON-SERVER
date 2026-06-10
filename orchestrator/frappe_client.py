@@ -38,6 +38,9 @@ def call_frappe(tool_call: dict):
 
     # Build headers from forwarded employee session (cookie + CSRF)
     headers = dict(_frappe_request_headers.get() or {})
+    for key in list(headers.keys()):
+        if key.lower() == "host":
+            headers.pop(key)
 
     # Auth priority:
     # 1. Forwarded employee session (cookie + CSRF token) — preferred for test/prod
