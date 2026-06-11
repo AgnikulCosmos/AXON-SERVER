@@ -1,4 +1,4 @@
-# AXON Chat UI Test Queries
+# Chat UI Test Queries
 
 This document lists the exact queries to type in the Chat UI to test all supported user actions and system use cases.
 

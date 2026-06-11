@@ -1,0 +1,1136 @@
+[
+  {
+    "route_name": "food_requests",
+    "description": "check my food bookings, check if I booked breakfast lunch or dinner, view my meal booking records, check if my meal was booked today or on a specific date, see my food booking history and my meal consumption records",
+    "examples": [
+      "did I book breakfast today",
+      "did I book lunch today",
+      "did I book dinner today",
+      "show my food bookings",
+      "show my meal bookings for today",
+      "did I book food yesterday",
+      "what meals did I book today",
+      "show my food booking history",
+      "did I book lunch yesterday",
+      "what meals have I booked this week"
+    ],
+    "doctype": "Food_Requests",
+    "frappe_method": "axon.api.get_food_requests",
+    "parameters": {
+      "meal": [
+        "breakfast",
+        "lunch",
+        "dinner"
+      ],
+      "date": "date",
+      "location": "string"
+    },
+    "field_mapping": {
+      "date": "date"
+    },
+    "available_fields": [
+      "name",
+      "date",
+      "location",
+      "employee_food_counts",
+      "manual_food_counts",
+      "overall_food_counts"
+    ]
+  },
+  {
+    "route_name": "food_menu",
+    "description": "check food menu, view food menu details, field includes menu",
+    "examples": [
+      "what is today's menu",
+      "show me the food menu",
+      "what's for lunch today",
+      "today's meal menu",
+      "show food menu"
+    ],
+    "doctype": "Food_Menu",
+    "frappe_method": "axon.api.get_food_menu",
+    "parameters": {},
+    "field_mapping": {
+      "menu": "menu"
+    },
+    "available_fields": [
+      "menu"
+    ]
+  },
+  {
+    "route_name": "food_settings",
+    "description": "check food settings, view food settings details, fields include maximum booking days, booking slots, restrict for, meals allowed, consumption slots, sms settings, blocked users",
+    "examples": [
+      "show food settings",
+      "what are the meal booking settings",
+      "how many days can I book in advance",
+      "food consumption settings",
+      "meal booking configuration"
+    ],
+    "doctype": "Food_Settings",
+    "frappe_method": "axon.api.get_food_settings",
+    "parameters": {
+      "maximum_booking_days": "number",
+      "booking_slots": "string",
+      "restrict_for": "string",
+      "days_allowed": "number",
+      "consumption_slots": "string",
+      "blocked_users": "string"
+    },
+    "field_mapping": {
+      "maximum_booking_days": "maximum_booking_days",
+      "booking_slots": "booking_slots",
+      "restrict_for": "restrict_for",
+      "days_allowed": "days_allowed",
+      "consumption_slots": "consumption_slots",
+      "blocked_users": "blocked_users"
+    },
+    "available_fields": [
+      "maximum_booking_days",
+      "booking_slots",
+      "restrict_for",
+      "days_allowed",
+      "consumption_slots",
+      "sms_settings",
+      "blocked_users",
+      "disable_on_insert",
+      "sync_old_app",
+      "email_list"
+    ]
+  },
+  {
+    "route_name": "id_cards",
+    "description": "check id cards, view id cards details, fields include employee id, employee name, employee email, date of joining, department name, crew name",
+    "examples": [
+      "show my id card",
+      "get employee id card details",
+      "what is my employee id",
+      "id card information",
+      "view my id card"
+    ],
+    "doctype": "ID Cards",
+    "frappe_method": "axon.api.get_id_cards",
+    "parameters": {
+      "employee_id": "string",
+      "employee_name": "string",
+      "employee_email": "string",
+      "date_of_joining": "date",
+      "department_name": "string",
+      "crew_name": "string"
+    },
+    "field_mapping": {
+      "employee_id": "employee_id",
+      "employee_name": "employee_name",
+      "employee_email": "employee_email",
+      "date_of_joining": "date_of_joining",
+      "department_name": "department_name",
+      "crew_name": "crew_name"
+    },
+    "available_fields": [
+      "name",
+      "employee_id",
+      "employee_name",
+      "employee_email",
+      "date_of_joining",
+      "department_name",
+      "crew_name"
+    ]
+  },
+  {
+    "route_name": "pr_attendance_requests",
+    "description": "check pr attendance requests, view pr attendance requests details, fields include employee email, employee name, status, request for, project name, department name",
+    "examples": [
+      "show my attendance requests",
+      "check attendance request status",
+      "list pending attendance requests",
+      "view my attendance request details",
+      "any approved attendance requests"
+    ],
+    "doctype": "PR_Attendance_Requests",
+    "frappe_method": "axon.api.get_pr_attendance_requests",
+    "parameters": {
+      "employee_email": "string",
+      "employee_name": "string",
+      "status": [
+        "open",
+        "pending",
+        "approved",
+        "rejected"
+      ],
+      "request_for": "string",
+      "project_name": "string",
+      "department_name": "string"
+    },
+    "field_mapping": {
+      "employee_email": "employee_email",
+      "employee_name": "employee_name",
+      "status": "status",
+      "request_for": "request_for",
+      "project_name": "project_name",
+      "department_name": "department_name"
+    },
+    "available_fields": [
+      "name",
+      "employee_email",
+      "employee_name",
+      "status",
+      "request_for",
+      "project_name",
+      "department_name"
+    ]
+  },
+  {
+    "route_name": "pr_leave_requests",
+    "description": "check pr leave requests, view pr leave requests details, fields include employee email, employee name, leave type, year, status, half-day",
+    "examples": [
+      "show my leave requests",
+      "check leave request status",
+      "list pending leave requests",
+      "view my leave applications",
+      "any approved leave requests",
+      "show rejected leave requests"
+    ],
+    "doctype": "PR_Leave_Requests",
+    "frappe_method": "axon.api.get_pr_leave_requests",
+    "parameters": {
+      "employee_email": "string",
+      "employee_name": "string",
+      "leave_type": "string",
+      "year": "string",
+      "status": [
+        "open",
+        "pending",
+        "approved",
+        "rejected"
+      ],
+      "half_day": "boolean"
+    },
+    "field_mapping": {
+      "employee_email": "employee_email",
+      "employee_name": "employee_name",
+      "leave_type": "leave_type",
+      "year": "year",
+      "status": "status",
+      "half_day": "half_day"
+    },
+    "available_fields": [
+      "name",
+      "employee_email",
+      "employee_name",
+      "leave_type",
+      "year",
+      "status",
+      "half_day"
+    ]
+  },
+  {
+    "route_name": "pr_leave_tracker",
+    "description": "check pr leave tracker, view pr leave tracker details, fields include year, total leaves taken, employee id, leave counts, approved leave requests, check casual/sick leave balance, how many leaves remaining",
+    "examples": [
+      "track my leaves",
+      "how many leaves have I taken",
+      "show leave tracker",
+      "total leaves taken this year",
+      "my leave summary",
+      "show my leave balance",
+      "how many casual leaves do I have left",
+      "check my sick leave balance",
+      "available casual and sick leaves",
+      "what is my casual leave balance"
+    ],
+    "doctype": "Leave Tracker",
+    "frappe_method": "payroll_management.v2.leaves.get_balance",
+    "parameters": {
+      "year": "string",
+      "total_leaves_taken": "number",
+      "employee_id": "string",
+      "leave_counts": "number",
+      "approved_leave_requests": "number"
+    },
+    "field_mapping": {
+      "year": "year",
+      "total_leaves_taken": "total_leaves_taken",
+      "employee_id": "employee_id",
+      "leave_counts": "leave_counts",
+      "approved_leave_requests": "approved_leave_requests"
+    },
+    "available_fields": [
+      "name",
+      "year",
+      "total_leaves_taken",
+      "employee_id",
+      "leave_counts",
+      "approved_leave_requests"
+    ]
+  },
+  {
+    "route_name": "pr_permission_requests",
+    "description": "check pr permission requests, view pr permission requests details, fields include employee id,  employee name, date, status, from time, to time",
+    "examples": [
+      "show my permission requests",
+      "check permission request status",
+      "list pending permission requests",
+      "view my permission details",
+      "any approved permission requests"
+    ],
+    "doctype": "PR_Permission_Requests",
+    "frappe_method": "axon.api.get_pr_permission_requests",
+    "parameters": {
+      "employee_id": "string",
+      "employee_name": "string",
+      "date": "date",
+      "status": [
+        "open",
+        "pending",
+        "approved",
+        "rejected"
+      ],
+      "from_time": "datetime",
+      "to_time": "datetime"
+    },
+    "field_mapping": {
+      "employee_id": "employee_id",
+      "employee_name": "employee_name",
+      "date": "date",
+      "status": "status",
+      "from_time": "from_time",
+      "to_time": "to_time"
+    },
+    "available_fields": [
+      "name",
+      "employee_id",
+      "employee_name",
+      "date",
+      "status",
+      "from_time",
+      "to_time"
+    ]
+  },
+  {
+    "route_name": "pr_policy",
+    "description": "check pr policy, view pr policy details, fields include title, content",
+    "examples": [
+      "show company policies",
+      "what are the HR policies",
+      "view policy details",
+      "list all policies",
+      "show leave policy"
+    ],
+    "doctype": "PR_Policy",
+    "frappe_method": "axon.api.get_pr_policy",
+    "parameters": {
+      "title": "string"
+    },
+    "field_mapping": {
+      "title": "title"
+    },
+    "available_fields": [
+      "name",
+      "title",
+      "content"
+    ]
+  },
+  {
+    "route_name": "pr_reimbursement_requests",
+    "description": "check pr reimbursement requests, view pr reimbursement requests details, fields include employee email, request for, project name, department name, employee name, status",
+    "examples": [
+      "show my reimbursement requests",
+      "check reimbursement status",
+      "list pending reimbursements",
+      "view reimbursement details",
+      "any approved reimbursement requests"
+    ],
+    "doctype": "PR_Reimbursement_Requests",
+    "frappe_method": "axon.api.get_pr_reimbursement_requests",
+    "parameters": {
+      "employee_email": "string",
+      "request_for": "string",
+      "project_name": "string",
+      "department_name": "string",
+      "employee_name": "string",
+      "status": [
+        "open",
+        "pending",
+        "approved",
+        "rejected"
+      ]
+    },
+    "field_mapping": {
+      "employee_email": "employee_email",
+      "request_for": "request_for",
+      "project_name": "project_name",
+      "department_name": "department_name",
+      "employee_name": "employee_name",
+      "status": "status"
+    },
+    "available_fields": [
+      "name",
+      "employee_email",
+      "request_for",
+      "project_name",
+      "department_name",
+      "employee_name",
+      "status"
+    ]
+  },
+  {
+    "route_name": "tm_projects",
+    "description": "check tm projects, view tm projects details, fields include project name, project description, project members, project lead, start date, end date",
+    "examples": [
+      "show my projects",
+      "list all projects",
+      "view project details",
+      "what projects am I working on",
+      "check project status"
+    ],
+    "doctype": "TM_Projects",
+    "frappe_method": "axon.api.get_tm_projects",
+    "parameters": {
+      "project_name": "string",
+      "project_lead": "string",
+      "start_date": "date",
+      "end_date": "date"
+    },
+    "field_mapping": {
+      "project_name": "project_name",
+      "project_lead": "project_lead",
+      "start_date": "start_date",
+      "end_date": "end_date"
+    },
+    "available_fields": [
+      "name",
+      "project_name",
+      "project_description",
+      "project_members",
+      "project_lead",
+      "start_date",
+      "end_date"
+    ]
+  },
+  {
+    "route_name": "tm_tasks",
+    "description": "check tm tasks, view tm tasks details, fields include project, task name, task description, status, assigned to, due date",
+    "examples": [
+      "show my tasks",
+      "list pending tasks",
+      "what tasks are assigned to me",
+      "check task status",
+      "view task details",
+      "tasks due this week"
+    ],
+    "doctype": "TM_Tasks",
+    "frappe_method": "axon.api.get_tm_tasks",
+    "parameters": {
+      "project": "string",
+      "task_name": "string",
+      "status": [
+        "open",
+        "in_progress",
+        "completed",
+        "closed"
+      ],
+      "assigned_to": "string",
+      "due_date": "date"
+    },
+    "field_mapping": {
+      "project": "project",
+      "task_name": "task_name",
+      "status": "status",
+      "assigned_to": "assigned_to",
+      "due_date": "due_date"
+    },
+    "available_fields": [
+      "name",
+      "project",
+      "task_name",
+      "task_description",
+      "status",
+      "assigned_to",
+      "due_date"
+    ]
+  },
+  {
+    "route_name": "tm_time_logs",
+    "description": "check tm time logs, view tm time logs details, fields include task, user, start time, end time, notes",
+    "examples": [
+      "show my time logs",
+      "check time tracking",
+      "view time log details",
+      "how much time did I log",
+      "list time entries"
+    ],
+    "doctype": "TM_Time_Logs",
+    "frappe_method": "axon.api.get_tm_time_logs",
+    "parameters": {
+      "task": "string",
+      "user": "string",
+      "start_time": "datetime",
+      "end_time": "datetime"
+    },
+    "field_mapping": {
+      "task": "task",
+      "user": "user",
+      "start_time": "start_time",
+      "end_time": "end_time"
+    },
+    "available_fields": [
+      "name",
+      "task",
+      "user",
+      "start_time",
+      "end_time",
+      "notes"
+    ]
+  },
+  {
+    "route_name": "erp_tickets_create",
+    "description": "Raise, create, or lodge an ERP Support ticket. Use this when the user wants to report an issue, bug, failure, or complaint about an ERP application or module. It handles priority levels like P0, P1, P2, P3, application names, module names, issue dates, roles, descriptions, and attachments.",
+    "examples": [
+      "raise a ticket for erp issue",
+      "create a support ticket in erp",
+      "report an issue in erp support",
+      "lodge an erp support ticket",
+      "raise a P1 ticket for the Payroll app",
+      "create a ticket for the HR app",
+      "I want to report a bug in the Finance module",
+      "raise a P0 ticket for dashboard in uhjkm app with description D",
+      "create an ERP ticket for app uhjkm module Dashboard priority P0"
+    ],
+    "doctype": "ERP_Tickets",
+    "frappe_method": "erp_support.put_api.create",
+    "parameters": {
+      "app_name": [
+        "Food and Beverages",
+        "Vendor Portal",
+        "Rig Tracking",
+        "Vehicle Tracking",
+        "ERP Support",
+        "Entry Exit",
+        "Budget & Expense Management",
+        "Instrumentation Software",
+        "Manufacturing Management",
+        "CAD Management",
+        "IT Support",
+        "Fleet Management",
+        "Packaging Management",
+        "Engineering & Infrastructure",
+        "Maintenance Management",
+        "Inventory Management",
+        "PMO",
+        "Safety Management",
+        "Quality Management",
+        "Finance Management",
+        "Procurement Management",
+        "Sourcing Management",
+        "Visitor Management",
+        "HR Operations",
+        "Vendor Management",
+        "Appraisal Management",
+        "Admin Portal",
+        "Task Management",
+        "Agnikul Core ERP",
+        "Design For Realization",
+        "Crew Management",
+        "Recruitment Management"
+      ],
+      "priority": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "status": [
+        "Yet To Start",
+        "In Progress",
+        "To Test",
+        "Testing Completed",
+        "Resolved",
+        "Cancelled"
+      ],
+      "issue_dt": "date",
+      "description": "string",
+      "module": "string",
+      "attachments": "string",
+      "roles": "string"
+    },
+    "field_mapping": {
+      "app_name": "app_name",
+      "priority": "priority",
+      "status": "status",
+      "issue_dt": "issue_dt",
+      "description": "description",
+      "module": "module",
+      "attachments": "attachments",
+      "roles": "roles"
+    },
+    "available_fields": [
+      "name",
+      "app_name",
+      "priority",
+      "status",
+      "issue_dt",
+      "description",
+      "module",
+      "attachments",
+      "roles",
+      "raised_by"
+    ]
+  },
+  {
+    "route_name": "erp_apps_list",
+    "description": "List ERP Support applications configured in ERP_Applications. Use this when the user asks for available ERP Support app names, application list, valid app names for tickets, feedback, or suggestions.",
+    "examples": [
+      "show ERP support apps",
+      "list ERP applications",
+      "what apps can I raise ERP support tickets for",
+      "give me the list of apps",
+      "show valid app names for ERP support"
+    ],
+    "doctype": "ERP_Applications",
+    "frappe_method": "erp_support.get_api.get_apps",
+    "parameters": {
+      "start": "number",
+      "limit": "number",
+      "query": "string"
+    },
+    "field_mapping": {
+      "start": "start",
+      "limit": "limit",
+      "query": "query"
+    },
+    "available_fields": [
+      "name",
+      "fe_dev",
+      "be_dev",
+      "module",
+      "roles",
+      "app_icon"
+    ]
+  },
+  {
+    "route_name": "erp_feedback_create",
+    "description": "Create ERP Support feedback or review for an ERP application. Use this when the user wants to submit feedback, give a review, or rate an ERP app.",
+    "examples": [
+      "give feedback for uhjkm app saying S with rating 4",
+      "submit a review for Payroll app rating 5",
+      "create ERP support feedback for app uhjkm feedback S ratings 4",
+      "I want to give feedback for the dashboard app"
+    ],
+    "doctype": "ERP_Feedback_Suggestions",
+    "frappe_method": "erp_support.put_api.create",
+    "parameters": {
+      "app_name": [
+        "Food and Beverages",
+        "Vendor Portal",
+        "Rig Tracking",
+        "Vehicle Tracking",
+        "ERP Support",
+        "Entry Exit",
+        "Budget & Expense Management",
+        "Instrumentation Software",
+        "Manufacturing Management",
+        "CAD Management",
+        "IT Support",
+        "Fleet Management",
+        "Packaging Management",
+        "Engineering & Infrastructure",
+        "Maintenance Management",
+        "Inventory Management",
+        "PMO",
+        "Safety Management",
+        "Quality Management",
+        "Finance Management",
+        "Procurement Management",
+        "Sourcing Management",
+        "Visitor Management",
+        "HR Operations",
+        "Vendor Management",
+        "Appraisal Management",
+        "Admin Portal",
+        "Task Management",
+        "Agnikul Core ERP",
+        "Design For Realization",
+        "Crew Management",
+        "Recruitment Management"
+      ],
+      "feedback": "string",
+      "ratings": "number",
+      "attachments": "string"
+    },
+    "field_mapping": {
+      "app_name": "app_name",
+      "feedback": "feedback",
+      "ratings": "ratings",
+      "attachments": "attachments"
+    },
+    "available_fields": [
+      "name",
+      "app_name",
+      "type",
+      "feedback",
+      "ratings",
+      "attachments",
+      "raised_by"
+    ]
+  },
+  {
+    "route_name": "erp_suggestion_create",
+    "description": "Create ERP Support suggestion for an ERP application. Use this when the user wants to suggest an improvement, feature, change, or enhancement for an ERP app.",
+    "examples": [
+      "give a suggestion for uhjkm app priority Medium feedback d helps d",
+      "submit an ERP suggestion for HR app",
+      "suggest an improvement for Dashboard with medium priority",
+      "create suggestion for app uhjkm with feedback d and helps d"
+    ],
+    "doctype": "ERP_Feedback_Suggestions",
+    "frappe_method": "erp_support.put_api.create",
+    "parameters": {
+      "app_name": [
+        "Food and Beverages",
+        "Vendor Portal",
+        "Rig Tracking",
+        "Vehicle Tracking",
+        "ERP Support",
+        "Entry Exit",
+        "Budget & Expense Management",
+        "Instrumentation Software",
+        "Manufacturing Management",
+        "CAD Management",
+        "IT Support",
+        "Fleet Management",
+        "Packaging Management",
+        "Engineering & Infrastructure",
+        "Maintenance Management",
+        "Inventory Management",
+        "PMO",
+        "Safety Management",
+        "Quality Management",
+        "Finance Management",
+        "Procurement Management",
+        "Sourcing Management",
+        "Visitor Management",
+        "HR Operations",
+        "Vendor Management",
+        "Appraisal Management",
+        "Admin Portal",
+        "Task Management",
+        "Agnikul Core ERP",
+        "Design For Realization",
+        "Crew Management",
+        "Recruitment Management"
+      ],
+      "priority": [
+        "Low",
+        "Medium",
+        "High"
+      ],
+      "feedback": "string",
+      "helps": "string",
+      "attachments": "string"
+    },
+    "field_mapping": {
+      "app_name": "app_name",
+      "priority": "priority",
+      "feedback": "feedback",
+      "helps": "helps",
+      "attachments": "attachments"
+    },
+    "available_fields": [
+      "name",
+      "app_name",
+      "type",
+      "priority",
+      "feedback",
+      "helps",
+      "attachments",
+      "raised_by",
+      "status"
+    ]
+  },
+  {
+    "route_name": "erp_tickets_list",
+    "description": "List, show, or view ERP Support tickets visible to the logged-in user. Employees should only see tickets raised by themselves, as enforced by the ERP Support API session user.",
+    "examples": [
+      "show my ERP tickets",
+      "list my support tickets",
+      "view tickets I raised",
+      "show my ERP support requests",
+      "what is the status of my support tickets",
+      "show my ticket history"
+    ],
+    "doctype": "ERP_Tickets",
+    "frappe_method": "erp_support.get_api.get_tickets",
+    "parameters": {
+      "from_date": "date",
+      "to_date": "date",
+      "start": "number",
+      "limit": "number",
+      "query": "string"
+    },
+    "field_mapping": {
+      "from_date": "from_date",
+      "to_date": "to_date",
+      "start": "start",
+      "limit": "limit",
+      "query": "query"
+    },
+    "available_fields": [
+      "name",
+      "app_name",
+      "priority",
+      "issue_dt",
+      "description",
+      "status",
+      "raised_by",
+      "creation"
+    ]
+  },
+  {
+    "route_name": "erp_feedback_list",
+    "description": "List, show, or view ERP Support feedback and reviews visible to the logged-in user.",
+    "examples": [
+      "show ERP feedback",
+      "list feedback reviews",
+      "show my ERP reviews",
+      "view feedback for ERP apps",
+      "show support feedback"
+    ],
+    "doctype": "ERP_Feedback_Suggestions",
+    "frappe_method": "erp_support.get_api.get_fb_sg",
+    "parameters": {
+      "from_date": "date",
+      "to_date": "date",
+      "start": "number",
+      "limit": "number",
+      "query": "string"
+    },
+    "field_mapping": {
+      "from_date": "from_date",
+      "to_date": "to_date",
+      "start": "start",
+      "limit": "limit",
+      "query": "query"
+    },
+    "available_fields": [
+      "name",
+      "app_name",
+      "type",
+      "raised_by",
+      "creation",
+      "feedback",
+      "ratings"
+    ]
+  },
+  {
+    "route_name": "erp_suggestions_list",
+    "description": "List, show, or view ERP Support suggestions visible to the logged-in user. Employees should only see suggestions raised by themselves, as enforced by the ERP Support API session user.",
+    "examples": [
+      "show my ERP suggestions",
+      "list suggestions I raised",
+      "view my support suggestions",
+      "show ERP suggestion status",
+      "show my suggestion history"
+    ],
+    "doctype": "ERP_Feedback_Suggestions",
+    "frappe_method": "erp_support.get_api.get_fb_sg",
+    "parameters": {
+      "from_date": "date",
+      "to_date": "date",
+      "start": "number",
+      "limit": "number",
+      "query": "string"
+    },
+    "field_mapping": {
+      "from_date": "from_date",
+      "to_date": "to_date",
+      "start": "start",
+      "limit": "limit",
+      "query": "query"
+    },
+    "available_fields": [
+      "name",
+      "app_name",
+      "type",
+      "raised_by",
+      "creation",
+      "feedback",
+      "priority",
+      "status"
+    ]
+  },
+  {
+    "route_name": "erp_support_view_details",
+    "description": "View details for an ERP Support application, ticket, feedback, review, suggestion, user manual, FAQ, update, or record by document name or ID.",
+    "examples": [
+      "show details for ERP_I_1234",
+      "view ERP support ticket ERP_I_1234",
+      "get details for feedback FBSG-0001",
+      "show suggestion details for SUG-0002",
+      "open ERP support record ERP_I_4321"
+    ],
+    "doctype": "",
+    "frappe_method": "erp_support.get_api.view_details",
+    "parameters": {
+      "docname": "string"
+    },
+    "field_mapping": {
+      "docname": "docname"
+    },
+    "available_fields": [
+      "name",
+      "app_name",
+      "type",
+      "priority",
+      "status",
+      "module",
+      "issue_date",
+      "raised_by",
+      "raised_on",
+      "description",
+      "feedback",
+      "helps",
+      "ratings",
+      "attachments"
+    ]
+  },
+  {
+    "route_name": "lost_found_create",
+    "description": "Report a lost item, record an item as lost, or mark/update a lost item as found. Use this when the user says they lost something (like a phone, keys, charger, card) or found a lost item.",
+    "examples": [
+      "I lost my phone in the canteen today",
+      "report a lost item keys in corridor",
+      "mark LF-26-0526-08242 as found",
+      "I found the keys at reception",
+      "mark my lost item as found",
+      "record lost charger in lab"
+    ],
+    "doctype": "Lost And Found",
+    "frappe_method": "core.factory.api.post_data",
+    "parameters": {
+      "name": "string",
+      "item_name": "string",
+      "lost_location": "string",
+      "lost_date": "date",
+      "lost_description": "string",
+      "status": [
+        "Pending",
+        "Found",
+        "Cancelled",
+        "Acknowledge"
+      ],
+      "found_location": "string",
+      "found_date": "date",
+      "found_description": "string"
+    },
+    "field_mapping": {
+      "name": "name",
+      "item_name": "item_name",
+      "lost_location": "lost_location",
+      "lost_date": "lost_date",
+      "lost_description": "lost_description",
+      "status": "status",
+      "found_location": "found_location",
+      "found_date": "found_date",
+      "found_description": "found_description"
+    },
+    "available_fields": [
+      "name",
+      "item_name",
+      "lost_location",
+      "lost_date",
+      "lost_description",
+      "status",
+      "found_location",
+      "found_date",
+      "found_description"
+    ]
+  },
+  {
+    "route_name": "lost_found_list",
+    "description": "List, show, or view lost and found items or records. Use this when the user wants to see what has been reported lost.",
+    "examples": [
+      "show all lost items",
+      "list lost and found records",
+      "show lost ones",
+      "what items are lost?",
+      "list lost items"
+    ],
+    "doctype": "Lost And Found",
+    "frappe_method": "core.factory.api.get_data",
+    "parameters": {
+      "status": "string"
+    },
+    "field_mapping": {
+      "status": "status"
+    },
+    "available_fields": [
+      "name",
+      "item_name",
+      "lost_location",
+      "lost_date",
+      "upload_image",
+      "lost_description",
+      "status",
+      "creation",
+      "owner",
+      "found_location",
+      "found_date",
+      "found_description",
+      "found_by"
+    ]
+  },
+  {
+    "route_name": "track_request",
+    "description": "Track a request status or view details of any ERP support ticket, feedback, suggestion, or food log record by its reference ID. Use this when the user provides a known ID like ERP_I_xxx, ERP-SF-xx-xxxx, or a food request ID.",
+    "examples": [
+      "track request PC-2026-0001",
+      "status of MM-2026-0003",
+      "check ticket ERP_I_9876",
+      "what is the status of MT-2026-0005?",
+      "view details of my request PC-06-26-1024",
+      "track ERP-SF-06-0034",
+      "check status of feedback ERP-SF-06-0010",
+      "what is the status of my ERP ticket ERP_I_14",
+      "show me details of ERP-SF-06-0033"
+    ],
+    "doctype": "",
+    "frappe_method": "",
+    "parameters": {
+      "req_id": "string"
+    },
+    "field_mapping": {
+      "req_id": "req_id"
+    }
+  },
+  {
+    "route_name": "food_log_list",
+    "description": "List or view food booking logs/history, or check status of food/meal requests (Breakfast, Lunch, Dinner).",
+    "examples": [
+      "show my food log",
+      "what did I book for lunch today?",
+      "check my canteen food bookings for this week",
+      "list my meal requests from yesterday to today"
+    ],
+    "doctype": "",
+    "frappe_method": "food.api.log.food_log",
+    "parameters": {
+      "from_date": "date",
+      "to_date": "date",
+      "request_type": ["Self", "Manual FC", "Organisation", "Team"],
+      "location": "string",
+      "meal_type": ["Breakfast", "Lunch", "Dinner", "All"]
+    },
+    "field_mapping": {
+      "from_date": "from_date",
+      "to_date": "to_date",
+      "request_type": "request_type",
+      "location": "location",
+      "meal_type": "meal_type"
+    }
+  },
+  {
+    "route_name": "RAG",
+    "description": "Retrieve internal knowledge about Agnikul Cosmos — company policies, HR rules, leave policies, company history, founders, vehicles like Agnibaan and Agnilet, milestones, launches, SDSC, SHAR, ISRO, canteen menu, reimbursements, payroll, attendance, shifts, holidays, fleets, and all internal enterprise information that is not publicly available.",
+    "examples": [
+      "what is the leave policy at Agnikul",
+      "how many casual leaves do employees get",
+      "what is the canteen menu for today",
+      "tell me about Agnibaan",
+      "who is the founder of Agnikul Cosmos",
+      "what is the dress code",
+      "how does reimbursement work",
+      "what is the company holiday calendar",
+      "tell me about Dhanush launchpad",
+      "what time does the cafeteria serve breakfast"
+    ],
+    "doctype": "",
+    "frappe_method": "",
+    "parameters": {},
+    "field_mapping": {},
+    "available_fields": []
+  },
+  {
+    "route_name": "TOOLS",
+    "description": "Use external search tools like Wikipedia, DuckDuckGo, or arXiv to find answers about general knowledge, world facts, current events, public figures, scientific concepts, research papers, or any information that is not internal to Agnikul Cosmos.",
+    "examples": [
+      "search wiki for quantum physics",
+      "what is the weather in Chennai today",
+      "who is the prime minister of India",
+      "search for papers on machine learning",
+      "what is a rocket engine",
+      "how does a rocket launch work",
+      "tell me about gravitational waves",
+      "search duckduckgo for SpaceX news",
+      "lookup arxiv papers on transformers",
+      "what is the capital of France"
+    ],
+    "doctype": "",
+    "frappe_method": "",
+    "parameters": {},
+    "field_mapping": {},
+    "available_fields": []
+  },
+  {
+    "route_name": "QWEN",
+    "description": "Answer general knowledge, coding, math, logic, reasoning, conceptual, creative, and instructional questions using the LLM's built-in knowledge without needing any external retrieval, company documents, or tool calls.",
+    "examples": [
+      "what is 2 plus 2",
+      "write a Python function to sort a list",
+      "explain the theory of relativity",
+      "how do I center a div in CSS",
+      "what is the meaning of life",
+      "translate good morning to Spanish",
+      "write a poem about space",
+      "explain how a CPU works",
+      "what is the difference between TCP and UDP",
+      "how do I make a HTTP request in Python"
+    ],
+    "doctype": "",
+    "frappe_method": "",
+    "parameters": {},
+    "field_mapping": {},
+    "available_fields": []
+  },
+  {
+    "route_name": "IDENTITY",
+    "description": "Questions about the AI assistant itself — who are you, what is your name, what can you help with, what are your capabilities, what can Axon do, who built you, what is your purpose.",
+    "examples": [
+      "who are you",
+      "what is your name",
+      "who is Axon",
+      "what can Axon help with",
+      "what can you do",
+      "tell me about yourself",
+      "what are your capabilities",
+      "what are you capable of",
+      "introduce yourself",
+      "what can Axon do for me"
+    ],
+    "doctype": "",
+    "frappe_method": "",
+    "parameters": {},
+    "field_mapping": {},
+    "available_fields": []
+  },
+  {
+    "route_name": "HOW_TO",
+    "description": "Questions about how to perform specific actions in Agnikul's ERP system — how to raise a ticket, how to submit feedback, how to track a request, how to check leave balance, how to report a lost item, procedural guides.",
+    "examples": [
+      "how do I raise a ticket",
+      "how to submit feedback",
+      "how can I track my request",
+      "how do I check my leave balance",
+      "how to report a lost item",
+      "steps to create a support ticket",
+      "how do I view my food log",
+      "how to apply for leave",
+      "procedure for submitting feedback",
+      "how to check my attendance"
+    ],
+    "doctype": "",
+    "frappe_method": "",
+    "parameters": {},
+    "field_mapping": {},
+    "available_fields": []
+  }
+]

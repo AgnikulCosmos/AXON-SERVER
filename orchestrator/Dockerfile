@@ -5,9 +5,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY api.py main.py /app/
 COPY common/ /app/common/
-COPY orchestrator/ /app/
+COPY services/ /app/services/
+COPY orchestrator/ /app/orchestrator/
+COPY prompts/ /app/prompts/
 
 ENV PYTHONPATH=/app
 
-CMD ["uvicorn", "orchestrator.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

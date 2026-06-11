@@ -1,45 +1,22 @@
 import common.config_loader
+import common.streaming.sse
+
+common.streaming.sse.install_stdout_proxy()
 import os
 import uuid
 import asyncio
+import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 import re
-import sys
 from io import StringIO
 import httpx
-import contextvars
 
-task_stdout = contextvars.ContextVar("task_stdout", default=None)
+import ollama
 
-class TaskLocalStdout:
-    def write(self, data):
-        buf = task_stdout.get()
-        if buf is not None:
-            buf.write(data)
-        else:
-            sys.__stdout__.write(data)
-
-    def flush(self):
-        buf = task_stdout.get()
-        if buf is not None:
-            buf.flush()
-        else:
-            sys.__stdout__.flush()
-
-    def isatty(self):
-        return sys.__stdout__.isatty()
-
-    @property
-    def encoding(self):
-        return sys.__stdout__.encoding
-
-    @property
-    def errors(self):
-        return sys.__stdout__.errors
-
-# Install proxy globally
-sys.stdout = TaskLocalStdout()
+from common.streaming.sse import task_stdout, clean_line, sse_event, install_stdout_proxy
+from common.constants import SIMPLE_GREETINGS
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -56,7 +33,76 @@ from orchestrator.agent import (
     MARKER_FINAL_END,
 )
 
-app = FastAPI(title="Agnikul Agent API", version="1.0")
+logger = logging.getLogger("api")
+
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+TITLE_MODEL = os.getenv("LLM_MODEL", "qwen2.5:1.5b")
+
+
+async def _wait_for_ollama(retries: int = 12, delay: float = 5.0) -> bool:
+    for attempt in range(1, retries + 1):
+        try:
+            async with ollama.AsyncClient(host=OLLAMA_BASE_URL) as client:
+                await client.list()
+            return True
+        except Exception:
+            pass
+        logger.warning(f"Ollama not ready (attempt {attempt}/{retries}), retrying in {delay}s...")
+        await asyncio.sleep(delay)
+    return False
+
+
+async def _pull_model(model: str, retries: int = 3) -> bool:
+    for attempt in range(1, retries + 1):
+        try:
+            logger.info(f"Pulling model '{model}' (attempt {attempt}/{retries})...")
+            async with ollama.AsyncClient(host=OLLAMA_BASE_URL) as client:
+                await client.pull(model)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to pull model '{model}': {e}")
+            if attempt < retries:
+                await asyncio.sleep(3.0)
+    return False
+
+
+async def _verify_model(model: str) -> bool:
+    try:
+        async with ollama.AsyncClient(host=OLLAMA_BASE_URL) as client:
+            await client.chat(model=model, messages=[{"role": "user", "content": "ping"}])
+        return True
+    except Exception:
+        return False
+
+
+async def _ensure_ollama_models():
+    logger.info("Bootstrapping Ollama models...")
+    if not await _wait_for_ollama():
+        logger.error("Ollama did not become healthy — skipping model pull")
+        return
+
+    models_to_pull = [
+        os.getenv("EMBEDDING_MODEL", "mxbai-embed-large"),
+        os.getenv("LLM_MODEL", "qwen2.5:1.5b"),
+    ]
+    for model in models_to_pull:
+        if await _verify_model(model):
+            logger.info(f"Model '{model}' already available")
+            continue
+
+        if await _pull_model(model):
+            logger.info(f"Model '{model}' is ready.")
+        else:
+            logger.error(f"Model '{model}' could not be pulled after retries")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await _ensure_ollama_models()
+    yield
+
+
+app = FastAPI(title="Agnikul Agent API", version="1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -69,8 +115,6 @@ app.add_middleware(
 UPLOADS_DIR = Path("uploads")
 UPLOADS_DIR.mkdir(exist_ok=True)
 DEFAULT_TIMEOUT = 1000
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-TITLE_MODEL = "qwen2.5:1.5b"
 
 
 class QueryRequest(BaseModel):
@@ -93,25 +137,6 @@ class TitleGenerationRequest(BaseModel):
     last_title_message_count: int = 0
     force: bool = False
     timeout: Optional[int] = DEFAULT_TIMEOUT
-
-def clean_line(line: str) -> str:
-    """
-    Minimal cleaning: remove only nulls / carriage returns and leading stray 'event:' prefixes.
-    Keep '*' and other markdown characters intact.
-    """
-    # remove any leading "event:" literal that might be present (but don't remove '|')
-    line = re.sub(r'^\s*event:\s*', '', line)
-    return line.replace("\x00", "").replace("\r", "").strip()
-
-
-def sse_event(data: str, event_type: Optional[str] = None) -> str:
-    """Format SSE event."""
-    safe = data.replace("\x00", "").replace("\r", "")
-    if event_type:
-        return f"event: {event_type}\ndata: {safe}\n\n"
-    else:
-        return f"data: {safe}\n\n"
-
 
 def frappe_headers_from_request(request: Request) -> dict:
     forwarded = {}
@@ -247,13 +272,11 @@ async def generate_title_endpoint(req: TitleGenerationRequest):
     # GREETING FILTER
     # -------------------------------
 
-    simple_greetings = {"hi", "hello", "hey", "hii", "hola", "hiya", "yo", "sup", "greetings"}
-
     meaningful_messages = []
     for msg in batch_messages:
         content = (msg.get("content") or "").strip().lower()
         content_clean = content.rstrip("!?.,'\"\r\n")
-        if content_clean not in simple_greetings:
+        if content_clean not in SIMPLE_GREETINGS:
             meaningful_messages.append(msg)
 
     if not meaningful_messages:
@@ -271,7 +294,7 @@ async def generate_title_endpoint(req: TitleGenerationRequest):
 
     conversation_summary = "\n".join(messages_text)
 
-    from prompts.registry import TITLE_GENERATION_PROMPT
+    from prompts.agent import TITLE_GENERATION_PROMPT
     prompt = TITLE_GENERATION_PROMPT.format(conversation_summary=conversation_summary)
 
     try:
@@ -427,8 +450,8 @@ async def stream_query(request: Request):
 @app.get("/v1/tools")
 def tools_list():
     """List available tools."""
-    from orchestrator.tool_dispatcher import TOOL_ENDPOINTS
-    from orchestrator.mcp_registry import MCP_REGISTRY
+    from services.tools.tool_dispatcher import TOOL_ENDPOINTS
+    from services.erp.mcp_registry import MCP_REGISTRY
     tools = [
         {"name": name, "description": f"Endpoint: {url}"}
         for name, url in TOOL_ENDPOINTS.items()

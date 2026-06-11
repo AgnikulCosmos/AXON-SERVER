@@ -22,13 +22,13 @@ logger = logging.getLogger(__name__)
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 _response_llm = ChatOllama(
-    model="qwen2.5:1.5b",
+    model=os.getenv("LLM_MODEL", "qwen2.5:1.5b"),
     base_url=OLLAMA_URL,
     temperature=0,
     streaming=False,
 )
 
-from prompts.registry import RESPONSE_GENERATOR_PROMPT
+from prompts.agent import RESPONSE_GENERATOR_PROMPT
 _RESPONSE_PROMPT = RESPONSE_GENERATOR_PROMPT
 
 

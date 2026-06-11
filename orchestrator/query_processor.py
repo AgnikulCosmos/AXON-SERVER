@@ -19,19 +19,19 @@ import asyncio
 import sys
 from typing import Any
 
-from common.router import route_query
-from common.rag_tool import rag_search
+from common.routing.router import route_query
+from common.rag.rag_tool import rag_search
 
-from orchestrator.planning import router_pipeline
-from orchestrator.erp_support_client import (
+from common.routing.planning import router_pipeline
+from services.erp.erp_support_client import (
     execute_erp_support_plan,
     format_erp_support_response,
     MissingParametersError,
 )
 from orchestrator.dispatcher import _friendly_erp_error
-from orchestrator.frappe_client import set_frappe_request_headers, reset_frappe_request_headers
+from services.erp.frappe_client import set_frappe_request_headers, reset_frappe_request_headers
 from orchestrator.qwen_agent import run_qwen, summarize_tool_output
-from orchestrator.tool_dispatcher import dispatch_tool
+from services.tools.tool_dispatcher import dispatch_tool
 
 
 IDENTITY_RESPONSE = "I am Axon, your friendly internal ERP AI Assistant at Agnikul Cosmos! I can help you with internal systems, HR, payroll, operations, organizational structure, and enterprise workflows."
@@ -76,7 +76,7 @@ async def process_query(
 
         # ── ERP Support Route ────────────────────────────────────────────
         if route.startswith("ERP_ROUTE:"):
-            return _process_erp_query(query)
+            return await _process_erp_query(query)
 
         # ── RAG Search Route ─────────────────────────────────────────────
         if route == "RAG":
@@ -106,8 +106,7 @@ async def process_query(
         reset_frappe_request_headers(token)
 
 
-def _process_erp_query(query: str) -> dict[str, Any]:
-    """Process an ERP Support query and return structured response."""
+async def _process_erp_query(query: str) -> dict[str, Any]:
     plan = router_pipeline.process(query)
     if not plan or not (
         plan.get("route_name", "").startswith("erp_")
@@ -120,8 +119,8 @@ def _process_erp_query(query: str) -> dict[str, Any]:
         }
 
     try:
-        response = execute_erp_support_plan(plan)
-        message = format_erp_support_response(plan, response)
+        response = await execute_erp_support_plan(plan)
+        message = await format_erp_support_response(plan, response)
         return {"query_type": "erp", "status": "ok", "message": message}
     except MissingParametersError as e:
         return {

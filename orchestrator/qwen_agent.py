@@ -11,11 +11,12 @@ import sys
 import re
 import asyncio
 
-from common.ollama_helper import get_working_ollama_base_url
-from prompts.registry import AXON_IDENTITY_PROMPT, SUMMARIZE_TOOL_OUTPUT_PROMPT
+from common.llm.ollama_helper import get_working_ollama_base_url
+from common.constants import LLM_MODEL
+from prompts.agent import AXON_IDENTITY_PROMPT, SUMMARIZE_TOOL_OUTPUT_PROMPT
 
 qwen_llm = ChatOllama(
-    model="qwen2.5:1.5b",
+    model=LLM_MODEL,
     base_url=get_working_ollama_base_url(),
     temperature=0.2,
     streaming=True

@@ -9,7 +9,7 @@ DB_PATH = "./chroma_langchain_db_user"
 COLLECTION_NAME = "agnikul_data"
 
 embeddings = OllamaEmbeddings(
-    model="mxbai-embed-large",
+    model=os.getenv("EMBEDDING_MODEL", "mxbai-embed-large"),
     base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 )
 

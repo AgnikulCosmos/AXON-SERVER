@@ -5,28 +5,29 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from common.router import route_query
-from common.rag_tool import rag_search
+from common.routing.router import route_query, get_erp_route_config
+from common.rag.rag_tool import rag_search
+from common.constants import (
+    ACTION_VERBS, ALLOWED_ACTION_CONTEXTS, FOUNDERS,
+    KNOWN_ENTITIES, PROFANITY_FALLBACK,
+)
 
 from orchestrator.agent import run_axon
 from orchestrator.qwen_agent import run_qwen, summarize_tool_output
-from orchestrator.tool_dispatcher import dispatch_tool
-from orchestrator.erp_tool_dispatcher import prepare_tool_call
-from orchestrator.erp_support_client import (
+from services.tools.tool_dispatcher import dispatch_tool
+from services.erp.erp_support_client import (
     execute_erp_support_plan,
     format_erp_support_response,
     MissingParametersError,
     get_current_user_email,
 )
-from orchestrator.planning import router_pipeline
-from orchestrator.planning.parameter_extractor import extract_parameters
-from orchestrator.planning.semantic_router import SemanticRouter
+from common.routing.planning.parameter_extractor import extract_parameters
 from orchestrator.agent import (
     MARKER_FINAL_START,
     MARKER_FINAL_END,
     stream_text_word_by_word,
 )
-from orchestrator.frappe_client import (
+from services.erp.frappe_client import (
     reset_frappe_request_headers,
     set_frappe_request_headers,
 )
@@ -36,26 +37,20 @@ import re
 def is_unrelated_query(query: str) -> bool:
     q = query.lower().strip()
     
-    # Check if a query contains action verbs that aren't search-related or allowed
-    action_verbs = ["send", "mail", "email", "post", "tweet", "slack", "schedule", "delete", "remove", "download", "install", "execute", "run", "book", "reserve", "order"]
-    for verb in action_verbs:
+    for verb in ACTION_VERBS:
         if re.search(r'\b' + re.escape(verb) + r'\b', q):
-            # Exclude allowed contexts
-            if any(ok in q for ok in ["lost", "found", "food", "log", "ticket", "feedback", "suggestion", "track", "tracking"]):
+            if any(ok in q for ok in ALLOWED_ACTION_CONTEXTS):
                 continue
             return True
             
     return False
 
-def check_employee_privacy(query: str, params: dict = None) -> str | None:
-    current_email = get_current_user_email() or "emp95@agnikul.in"
+async def check_employee_privacy(query: str, params: dict = None) -> str | None:
+    current_email = (await get_current_user_email()) or "emp95@agnikul.in"
     username = current_email.split('@')[0]
     
     # Extract digits from username
     user_digits = "".join(filter(str.isdigit, username))
-    
-    # Founders
-    founders = {"srinath", "moin", "satyanarayanan", "janardhana", "ravichandran", "spm"}
     
     q = query.lower()
     
@@ -74,7 +69,7 @@ def check_employee_privacy(query: str, params: dict = None) -> str | None:
     # Check for Priya or other unauthorized names
     words = re.findall(r'\b[a-zA-Z]{3,}\b', q)
     for word in words:
-        if word in founders or word == username or word in username:
+        if word in FOUNDERS or word == username or word in username:
             continue
         if word == "priya":
             return "I cannot disclose information about other employees."
@@ -97,8 +92,8 @@ def check_employee_privacy(query: str, params: dict = None) -> str | None:
                 
     return None
 
-def sanitize_or_block_response(response_text: str) -> str:
-    current_email = get_current_user_email() or "emp95@agnikul.in"
+async def sanitize_or_block_response(response_text: str) -> str:
+    current_email = (await get_current_user_email()) or "emp95@agnikul.in"
     username = current_email.split('@')[0]
     user_digits = "".join(filter(str.isdigit, username))
     
@@ -118,15 +113,11 @@ def sanitize_or_block_response(response_text: str) -> str:
         
     return response_text
 
-PROFANITY_FALLBACK = (
-    "Please use respectful and professional language while interacting with Axon."
-)
-
 TEST_MODE = False
 
 
 async def _get_friendly_missing_fields_message(fields: list[str], route_name: str | None = None) -> str:
-    from orchestrator.erp_support_client import _FIELD_LABELS, _FIELD_HINTS
+    from services.erp.erp_support_client import _FIELD_LABELS, _FIELD_HINTS
     
     # Determine greetings and examples based on route_name
     example_text = "It is a blue access card, and I lost it in the cafeteria."
@@ -320,8 +311,8 @@ async def contextualize_query_with_history(query: str, session_id: str | None) -
         return query
 
     try:
-        from orchestrator.frappe_client import call_frappe
-        session_data = call_frappe({
+        from services.erp.frappe_client import call_frappe
+        session_data = await call_frappe({
             "tool": "axon.api.get_session",
             "http_method": "GET",
             "arguments": {"session_id": session_id}
@@ -341,18 +332,10 @@ async def contextualize_query_with_history(query: str, session_id: str | None) -
         if not past_msgs:
             return query
 
-        # Bypass contextualizer entirely if query contains a known Agnikul-specific named entity or domain term.
-        # These terms are unambiguous — rewriting them via LLM only causes errors.
-        _KNOWN_ENTITIES = {
-            # Core Spacecraft & Proper Nouns
-            "agnikul", "cosmos", "agnibaan", "agnilet", "dhanush", "sorted",
-            "launchpad", "sdsc", "shar", "isro", "axon", "erp",
-            "srinath", "moin", "satyanarayanan", "janardhana", "ravichandran", "spm", "raju", "chakravarthy"
-        }
         query_lower_check = query.lower()
         
         # 1. Bypass if any specific Agnikul or ERP domain term is present
-        if any(entity in query_lower_check for entity in _KNOWN_ENTITIES):
+        if any(entity in query_lower_check for entity in KNOWN_ENTITIES):
             logger.info(f"[Query Contextualizer] Bypassing rewrite — known entity/domain keyword in query: {query!r}")
             return query
 
@@ -362,7 +345,7 @@ async def contextualize_query_with_history(query: str, session_id: str | None) -
         for role, content in recent_history:
             history_str += f"{role}: {content}\n"
 
-        from prompts.registry import CONTEXTUALIZER_PROMPT
+        from prompts.rag import CONTEXTUALIZER_PROMPT
         prompt = CONTEXTUALIZER_PROMPT.format(history_str=history_str, query=query)
 
         from orchestrator.qwen_agent import qwen_llm
@@ -429,43 +412,20 @@ async def _run_agent(query: str, session_id: str | None = None):
             tool_name=tool_name,
             tool_data=tool_result
         )
-        result = sanitize_or_block_response(result)
+        result = await sanitize_or_block_response(result)
 
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
         sys.stdout.flush()
         return result
 
     # Employee Privacy Filter
-    privacy_error = check_employee_privacy(query)
+    privacy_error = await check_employee_privacy(query)
     if privacy_error:
         sys.stdout.write(f"{MARKER_FINAL_START}\n")
         await stream_text_word_by_word(privacy_error)
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
         sys.stdout.flush()
         return privacy_error
-
-    # ── Check for Greetings and Identity BEFORE contextualization ──
-    # This prevents the history-rewriter from mangling simple conversational inputs.
-    temp_q = query.lower().strip("!?., ")
-    
-    # 1. Identity Check
-    if any(x in temp_q for x in ["who are you", "what is your name", "who is axon", "what can axon help", "what can you do"]):
-        identity_response = "I am Axon, your friendly internal ERP AI Assistant at Agnikul Cosmos! I can help you with internal systems, HR, payroll, operations, organizational structure, and enterprise workflows."
-        sys.stdout.write(f"{MARKER_FINAL_START}\n")
-        await stream_text_word_by_word(identity_response)
-        sys.stdout.write(f"{MARKER_FINAL_END}\n")
-        sys.stdout.flush()
-        return identity_response
-
-    # 2. Greeting Check
-    from common.greeting import is_greeting, get_greeting_response
-    if is_greeting(query):
-        greeting_resp = get_greeting_response()
-        sys.stdout.write(f"{MARKER_FINAL_START}\n")
-        await stream_text_word_by_word(greeting_resp)
-        sys.stdout.write(f"{MARKER_FINAL_END}\n")
-        sys.stdout.flush()
-        return greeting_resp
 
     # Only contextualize if NOT in a pending session to avoid mangling form inputs
     if not (session_id and session_id in PENDING_ERP_SESSIONS):
@@ -479,7 +439,7 @@ async def _run_agent(query: str, session_id: str | None = None):
         # 1. Search knowledge base
         rag_res = rag_search(query)
         if rag_res and "don't have that information" not in rag_res.lower() and "do not have that information" not in rag_res.lower():
-            rag_res = sanitize_or_block_response(rag_res)
+            rag_res = await sanitize_or_block_response(rag_res)
             sys.stdout.write(f"{MARKER_FINAL_START}\n")
             await stream_text_word_by_word(rag_res)
             sys.stdout.write(f"{MARKER_FINAL_END}\n")
@@ -492,7 +452,7 @@ async def _run_agent(query: str, session_id: str | None = None):
             route_name = matched_route.split(":", 1)[1]
             guide = ERP_INSTRUCTIONAL_GUIDES.get(route_name)
             if guide:
-                guide = sanitize_or_block_response(guide)
+                guide = await sanitize_or_block_response(guide)
                 sys.stdout.write(f"{MARKER_FINAL_START}\n")
                 await stream_text_word_by_word(guide)
                 sys.stdout.write(f"{MARKER_FINAL_END}\n")
@@ -547,8 +507,7 @@ async def _run_agent(query: str, session_id: str | None = None):
             new_params = structured_params
             has_extracted_params = True
         else:
-            router = SemanticRouter()
-            route_config = next((route for route in router.routes if route.get("route_name") == pending_route), None)
+            route_config = get_erp_route_config(pending_route)
             if route_config:
                 from copy import deepcopy
                 temp_config = deepcopy(route_config)
@@ -598,7 +557,7 @@ async def _run_agent(query: str, session_id: str | None = None):
 
             # Normalise app_name aliases in the reply
             if "app_name" in new_params:
-                from orchestrator.planning.parameter_extractor import APP_NAME_MAPPING
+                from common.routing.planning.parameter_extractor import APP_NAME_MAPPING
                 cand = new_params["app_name"].strip().lower()
                 for canonical, aliases in APP_NAME_MAPPING.items():
                     if cand == canonical.lower() or any(cand == a.lower() for a in aliases):
@@ -639,22 +598,6 @@ async def _run_agent(query: str, session_id: str | None = None):
     # -------------------------
     # REAL EXECUTION PATH
     # -------------------------
-    if "who are you" in q or q == "what is your name" or q == "who is axon" or "what can axon help" in q or "what can you do" in q:
-        identity_response = "I am Axon, your friendly internal ERP AI Assistant at Agnikul Cosmos! I can help you with internal systems, HR, payroll, operations, organizational structure, and enterprise workflows."
-        sys.stdout.write(f"{MARKER_FINAL_START}\n")
-        await stream_text_word_by_word(identity_response)
-        sys.stdout.write(f"{MARKER_FINAL_END}\n")
-        sys.stdout.flush()
-        return identity_response
-
-    if "qwen" in q or "base model" in q or "which model" in q or "what model" in q or "underlying model" in q or "architecture" in q:
-        model_response = "I cannot disclose the details of the base model here."
-        sys.stdout.write(f"{MARKER_FINAL_START}\n")
-        await stream_text_word_by_word(model_response)
-        sys.stdout.write(f"{MARKER_FINAL_END}\n")
-        sys.stdout.flush()
-        return model_response
-
     if route == "PROFANITY":
         sys.stdout.write(f"{MARKER_FINAL_START}\n")
         await stream_text_word_by_word(PROFANITY_FALLBACK)
@@ -680,7 +623,7 @@ async def _run_agent(query: str, session_id: str | None = None):
 
     if route == "RAG":
         result = rag_search(query)
-        result = sanitize_or_block_response(result)
+        result = await sanitize_or_block_response(result)
         sys.stdout.write(f"{MARKER_FINAL_START}\n")
         await stream_text_word_by_word(result)
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
@@ -695,8 +638,7 @@ async def _run_agent(query: str, session_id: str | None = None):
                 plan["original_query"] = query
 
         if plan:
-            # Check privacy on parameters
-            privacy_error = check_employee_privacy(query, plan.get("parameters"))
+            privacy_error = await check_employee_privacy(query, plan.get("parameters"))
             if privacy_error:
                 sys.stdout.write(f"{MARKER_FINAL_START}\n")
                 await stream_text_word_by_word(privacy_error)
@@ -709,14 +651,14 @@ async def _run_agent(query: str, session_id: str | None = None):
             
             try:
                 if route_name in ("track_request", "food_log_list", "pr_leave_tracker"):
-                    from orchestrator.tracking_client import execute_tracking_plan, format_tracking_response
-                    tool_response = execute_tracking_plan(plan)
+                    from services.erp.tracking_client import execute_tracking_plan, format_tracking_response
+                    tool_response = await execute_tracking_plan(plan)
                     result = format_tracking_response(tool_response)
                     if session_id and session_id in PENDING_ERP_SESSIONS:
                         del PENDING_ERP_SESSIONS[session_id]
                 elif method.startswith("erp_support.") or route_name.startswith("lost_found_"):
-                    tool_response = execute_erp_support_plan(plan)
-                    result = format_erp_support_response(plan, tool_response)
+                    tool_response = await execute_erp_support_plan(plan)
+                    result = await format_erp_support_response(plan, tool_response)
                     if session_id and session_id in PENDING_ERP_SESSIONS:
                         del PENDING_ERP_SESSIONS[session_id]
                 elif method.startswith("get_") or "list" in method or "query" in method:
@@ -747,7 +689,7 @@ async def _run_agent(query: str, session_id: str | None = None):
             result = "No matching ERP route could be resolved for your query."
 
         logger.info("Result for ERP route: %s (type: %s)", result, type(result))
-        result_str = sanitize_or_block_response(str(result))
+        result_str = await sanitize_or_block_response(str(result))
         sys.stdout.write(f"{MARKER_FINAL_START}\n")
         await stream_text_word_by_word(result_str)
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
@@ -759,7 +701,7 @@ async def _run_agent(query: str, session_id: str | None = None):
         sys.stdout.flush()
 
         result = await run_qwen(query)
-        result = sanitize_or_block_response(result)
+        result = await sanitize_or_block_response(result)
 
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
         sys.stdout.flush()
@@ -776,7 +718,7 @@ async def _run_agent(query: str, session_id: str | None = None):
             tool_name=tool_name,
             tool_data=tool_result
         )
-        result = sanitize_or_block_response(result)
+        result = await sanitize_or_block_response(result)
 
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
         sys.stdout.flush()
@@ -786,13 +728,12 @@ async def _run_agent(query: str, session_id: str | None = None):
     # DEFAULT: AXON
     # -------------------------
     res = await run_axon(query)
-    return sanitize_or_block_response(res)
+    return await sanitize_or_block_response(res)
 
 
 def _build_erp_plan(route_name: str, query: str) -> dict | None:
-    """Build an ERP plan for a specific route without going through semantic router."""
-    router = SemanticRouter()
-    route_config = next((route for route in router.routes if route.get("route_name") == route_name), None)
+    """Build an ERP plan for a specific route using shared SemanticRouter instance."""
+    route_config = get_erp_route_config(route_name)
     if not route_config:
         return None
 
