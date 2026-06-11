@@ -374,9 +374,9 @@ def _format_leave_tracker(counts: dict) -> str:
         remaining = 0.0
 
     md = []
-    md.append("### Leave Balance Summary")
-    md.append(f"- **Category**: Casual & Sick Leave")
-    md.append(f"- **Taken**: {taken} days")
-    md.append(f"- **Remaining Balance**: {remaining} days (out of 12)")
+    md.append("Leave Balance Summary")
+    md.append(f"Category: Casual & Sick Leave")
+    md.append(f"Taken: {taken} days")
+    md.append(f"Remaining Balance: {remaining} days (out of 12)")
     
     return "\n".join(md)

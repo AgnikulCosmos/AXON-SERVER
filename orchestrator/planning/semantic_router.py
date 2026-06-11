@@ -25,10 +25,15 @@ logger = logging.getLogger(__name__)
 class SemanticRouter:
     def __init__(
         self,
-        routes_path="orchestrator/planning/routes.json",
-        embeddings_path="orchestrator/planning/route_embeddings.npy",
+        routes_path=None,
+        embeddings_path=None,
         similarity_threshold=None,
     ):
+        if routes_path is None:
+            routes_path = Path(__file__).resolve().parent / "routes.json"
+        if embeddings_path is None:
+            embeddings_path = Path(__file__).resolve().parent / "route_embeddings.npy"
+
         self.routes_path = Path(routes_path)
         self.embeddings_path = Path(embeddings_path)
 

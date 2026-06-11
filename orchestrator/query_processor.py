@@ -21,6 +21,7 @@ from typing import Any
 
 from common.router import route_query
 from common.rag_tool import rag_search
+from common.relational_policy import check_relational_policy
 
 from orchestrator.planning import router_pipeline
 from orchestrator.erp_support_client import (
@@ -60,6 +61,11 @@ async def process_query(
         }
     """
     q = query.lower().strip("!?.,")
+
+    # ── Relational Policy Check ──────────────────────────────────────────
+    policy_response = check_relational_policy(query)
+    if policy_response:
+        return {"query_type": "identity", "status": "ok", "message": policy_response}
 
     # ── Identity & Greeting ──────────────────────────────────────────────
     if any(x in q for x in ["who are you", "what is your name", "who is axon", "what can axon help", "what can you do"]):

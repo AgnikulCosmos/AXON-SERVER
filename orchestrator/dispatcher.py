@@ -7,6 +7,7 @@ logger = logging.getLogger(__name__)
 
 from common.router import route_query
 from common.rag_tool import rag_search
+from common.relational_policy import check_relational_policy
 
 from orchestrator.agent import run_axon
 from orchestrator.qwen_agent import run_qwen, summarize_tool_output
@@ -390,6 +391,15 @@ async def _run_agent(query: str, session_id: str | None = None):
         sys.stdout.flush()
         return fallback_msg
 
+    # 1.5 Relational Policy Check
+    policy_response = check_relational_policy(query)
+    if policy_response:
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(policy_response)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return policy_response
+
     # 2. Capabilities Check
     if "capabilities" in temp_q or temp_q == "/capabilities":
         capabilities_response = (
@@ -670,6 +680,14 @@ async def _run_agent(query: str, session_id: str | None = None):
         sys.stdout.flush()
         return greeting_response
 
+    if route.startswith("RELATIONAL_RESPONSE:"):
+        policy_response = route.split(":", 1)[1]
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(policy_response)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return policy_response
+
     if route == "IDENTITY":
         identity_response = "I am Axon, your friendly internal ERP AI Assistant at Agnikul Cosmos! I can help you with internal systems, HR, payroll, operations, organizational structure, and enterprise workflows."
         sys.stdout.write(f"{MARKER_FINAL_START}\n")
@@ -825,9 +843,21 @@ def _build_erp_plan(route_name: str, query: str) -> dict | None:
 def _friendly_erp_error(exc: Exception) -> str:
     """Convert raw Frappe API errors into clean, user-readable messages."""
     import re as _re
+    import requests
+    
+    # 1. Distinguish system-level infrastructure failures from business logic
+    if isinstance(exc, (requests.exceptions.ConnectionError, requests.exceptions.ConnectTimeout)):
+        return "Failed to establish a connection to the ERP backend. Please verify your network connection and try again."
+        
+    if isinstance(exc, (requests.exceptions.Timeout, requests.exceptions.ReadTimeout)):
+        return "The ERP backend request timed out. Please try again."
 
     raw = str(exc)
 
+    # Check for HTTP status code response if raised from requests.exceptions.HTTPError
+    response = getattr(exc, "response", None)
+
+    # Parse Frappe JSON response first if present
     frappe_json_match = _re.search(r'Frappe response:\s*(\{.*)', raw, _re.S)
     if frappe_json_match:
         try:
@@ -861,9 +891,20 @@ def _friendly_erp_error(exc: Exception) -> str:
                     return f"Some required information is missing: {message}. Please provide all necessary details."
                 if exc_type == "PermissionError":
                     return f"You don't have permission to perform this action. {message}"
+                if exc_type == "DoesNotExistError":
+                    return f"The requested ERP resource was not found: {message}"
                 return f"I ran into an issue: {message}"
         except (json.JSONDecodeError, KeyError):
             pass
+
+    # Handle other HTTP errors that are system level
+    if response is not None:
+        status_code = getattr(response, "status_code", None)
+        if status_code:
+            if status_code >= 500:
+                return f"The ERP system is temporarily experiencing technical difficulties (HTTP {status_code}). Please try again later or contact your system administrator."
+            if status_code == 404:
+                return "The ERP API endpoint could not be found. Please contact support."
 
     cleaned = _re.sub(r'AXON auth debug:\s*\{[^}]*\}\.?\s*', '', raw)
     cleaned = _re.sub(r'Frappe response:\s*\{.*', '', cleaned, flags=_re.S)

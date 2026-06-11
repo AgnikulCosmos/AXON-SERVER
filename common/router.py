@@ -1,6 +1,7 @@
 from langchain_ollama import ChatOllama
 from common.safety import contains_profanity
 from common.greeting import get_greeting_response, is_greeting
+from common.relational_policy import check_relational_policy
 from orchestrator.planning.semantic_router import SemanticRouter
 import os
 import re
@@ -46,6 +47,11 @@ async def route_query(query: str) -> str:
     # Check profanity first
     if contains_profanity(query):
         return "PROFANITY"
+
+    # Check relational policy
+    policy_response = check_relational_policy(query)
+    if policy_response:
+        return f"RELATIONAL_RESPONSE:{policy_response}"
     
     # Check greeting before LLM router
     if is_greeting(query):
