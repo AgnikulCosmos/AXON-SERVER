@@ -62,15 +62,53 @@ for item in data:
             )
         )
 
+def get_chroma_store():
+    import chromadb
+    host = os.getenv("CHROMA_SERVER_HOST")
+    port = os.getenv("CHROMA_SERVER_PORT", "8000")
+    
+    if not host:
+        if os.path.exists('/.dockerenv'):
+            host = "chroma"
+            port = "8000"
+        else:
+            host = "127.0.0.1"
+            port = "8007"
+            
+    try:
+        client = chromadb.HttpClient(host=host, port=int(port))
+        client.heartbeat()
+        print(f"Connected to ChromaDB server at http://{host}:{port}")
+        
+        # Delete existing collection to rebuild clean
+        try:
+            client.delete_collection(COLLECTION_NAME)
+        except Exception:
+            pass
+            
+        return Chroma(
+            client=client,
+            embedding_function=embeddings,
+            collection_name=COLLECTION_NAME
+        )
+    except Exception as err:
+        print(f"Could not connect to ChromaDB server at http://{host}:{port} ({err}). Falling back to local file DB.")
+        import shutil
+        if os.path.exists(DB_PATH):
+            try:
+                shutil.rmtree(DB_PATH)
+            except Exception as e:
+                print(f"Warning: Could not clear local DB directory {DB_PATH}: {e}")
+        return Chroma(
+            persist_directory=DB_PATH,
+            embedding_function=embeddings,
+            collection_name=COLLECTION_NAME
+        )
+
+
 print(f"Prepared {len(documents)} documents for embedding")
 
-vector_store = Chroma(
-    persist_directory=DB_PATH,
-    embedding_function=embeddings,
-    collection_name=COLLECTION_NAME
-)
-
+vector_store = get_chroma_store()
 vector_store.add_documents(documents)
-
 
 print("Vector database rebuilt successfully.")

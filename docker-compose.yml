@@ -13,6 +13,7 @@ services:
       - arxiv
       - ddgs
       - ollama
+      - chroma
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
       # FRAPPE_URL is NOT set here — config_loader.py reads it from .env / .env.{APP_ENV}
@@ -47,6 +48,15 @@ services:
     volumes:
       - /usr/share/ollama/.ollama:/root/.ollama
     restart: unless-stopped
+
+  chroma:
+    image: chromadb/chroma:0.5.23
+    ports:
+      - "8007:8000"
+    volumes:
+      - ./chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
 
 volumes:
   ollama_data:

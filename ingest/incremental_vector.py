@@ -10,12 +10,34 @@ CHROMA_PATH = BASE_DIR / "chroma_langchain_db"
 
 
 def add_new_vectors(entries: list):
+    import os
+    import chromadb
     embeddings = OllamaEmbeddings(model="mxbai-embed-large")
 
-    db = Chroma(
-        persist_directory=str(CHROMA_PATH),
-        embedding_function=embeddings
-    )
+    host = os.getenv("CHROMA_SERVER_HOST")
+    port = os.getenv("CHROMA_SERVER_PORT", "8000")
+    
+    if not host:
+        if os.path.exists('/.dockerenv'):
+            host = "chroma"
+            port = "8000"
+        else:
+            host = "127.0.0.1"
+            port = "8007"
+            
+    try:
+        client = chromadb.HttpClient(host=host, port=int(port))
+        client.heartbeat()
+        db = Chroma(
+            client=client,
+            embedding_function=embeddings
+        )
+    except Exception as err:
+        print(f"Could not connect to ChromaDB server at http://{host}:{port} ({err}). Falling back to local file DB.")
+        db = Chroma(
+            persist_directory=str(CHROMA_PATH),
+            embedding_function=embeddings
+        )
 
     # Fetch existing IDs from vector DB
     existing = db.get(include=["metadatas"])
@@ -43,9 +65,9 @@ def add_new_vectors(entries: list):
         )
 
     if not docs_to_add:
-        print("ℹ️ No new vectors to add.")
+        print("No new vectors to add.")
         return
 
     db.add_documents(docs_to_add)
 
-    print(f"✅ Added {len(docs_to_add)} new vectors.")
+    print(f"Added {len(docs_to_add)} new vectors.")

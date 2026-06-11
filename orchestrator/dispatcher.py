@@ -7,7 +7,6 @@ logger = logging.getLogger(__name__)
 
 from common.router import route_query
 from common.rag_tool import rag_search
-from common.relational_policy import check_relational_policy
 
 from orchestrator.agent import run_axon
 from orchestrator.qwen_agent import run_qwen, summarize_tool_output
@@ -391,15 +390,6 @@ async def _run_agent(query: str, session_id: str | None = None):
         sys.stdout.flush()
         return fallback_msg
 
-    # 1.5 Relational Policy Check
-    policy_response = check_relational_policy(query)
-    if policy_response:
-        sys.stdout.write(f"{MARKER_FINAL_START}\n")
-        await stream_text_word_by_word(policy_response)
-        sys.stdout.write(f"{MARKER_FINAL_END}\n")
-        sys.stdout.flush()
-        return policy_response
-
     # 2. Capabilities Check
     if "capabilities" in temp_q or temp_q == "/capabilities":
         capabilities_response = (
@@ -679,14 +669,6 @@ async def _run_agent(query: str, session_id: str | None = None):
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
         sys.stdout.flush()
         return greeting_response
-
-    if route.startswith("RELATIONAL_RESPONSE:"):
-        policy_response = route.split(":", 1)[1]
-        sys.stdout.write(f"{MARKER_FINAL_START}\n")
-        await stream_text_word_by_word(policy_response)
-        sys.stdout.write(f"{MARKER_FINAL_END}\n")
-        sys.stdout.flush()
-        return policy_response
 
     if route == "IDENTITY":
         identity_response = "I am Axon, your friendly internal ERP AI Assistant at Agnikul Cosmos! I can help you with internal systems, HR, payroll, operations, organizational structure, and enterprise workflows."
