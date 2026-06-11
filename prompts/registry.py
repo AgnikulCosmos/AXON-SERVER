@@ -150,7 +150,7 @@ CRITICAL ROUTING RULES
 
 Respond ONLY with valid JSON:
 
-{ "intent": "GREETING" | "ERP" | "COMPANY" | "GENERAL" | "TOOLS" }
+{{ "intent": "GREETING" | "ERP" | "COMPANY" | "GENERAL" | "TOOLS" }}
 
 No explanations.
 No additional text.
@@ -209,9 +209,9 @@ Query: "how does a rocket launch?" -> Category: "TOOLS"
 Query: "weather in chennai today" -> Category: "TOOLS"
 
 Respond ONLY with a JSON object matching this structure:
-{
+{{
   "category": "<one of the 11 categories above>"
-}
+}}
 
 User Query: {query}
 JSON Output:"""
