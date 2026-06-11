@@ -64,6 +64,7 @@ index/
 # ===== Application Data =====
 uploads/
 chroma_langchain_db/
+chroma_data/
 
 # ===== Testing =====
 .pytest_cache/
