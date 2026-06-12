@@ -82,4 +82,10 @@ async def route_query(query: str) -> str:
     if result is not None:
         return result
 
+    # Fallback to RAG if query contains Agnikul/company keywords
+    company_keywords = {"agnikul", "cosmos", "agnibaan", "agnilet", "dhanush"}
+    if any(k in q for k in company_keywords):
+        logger.info(f"[Router] Forcing RAG fallback for company query: {query!r}")
+        return "RAG"
+
     return "QWEN"

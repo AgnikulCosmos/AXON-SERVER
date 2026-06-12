@@ -33,7 +33,7 @@ _summary_chain = _prompt | _summarizer_llm | StrOutputParser()
 # Dataset loading
 # -----------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATASET_PATH = os.path.abspath(os.path.join(BASE_DIR, "..", "dataset.json"))
+DATASET_PATH = os.path.abspath(os.path.join(BASE_DIR, "..", "..", "dataset.json"))
 
 _dataset_cache = None
 _dataset_mtime = None
