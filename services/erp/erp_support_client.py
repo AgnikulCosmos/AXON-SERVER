@@ -231,14 +231,21 @@ async def execute_erp_support_plan(plan: dict) -> dict:
 
     if route_name == "lost_found_create":
         from services.erp.mcp_registry import create_lost_found
+        import datetime
         status = params.get("status") or "Pending"
         if status == "Found" or params.get("name"):
+            # Default optional fields so creation never fails
+            params.setdefault("found_location", "Unknown")
+            params.setdefault("found_description", "No description provided")
+            params.setdefault("found_date", datetime.date.today().isoformat())
             payload = await _require(params, ["name", "found_location", "found_date", "found_description"])
             payload["found_date"] = _resolve_single_date(payload["found_date"])
-            payload.update({
-                "status": "Found"
-            })
+            payload.update({"status": "Found"})
         else:
+            # Default optional fields so creation never fails
+            params.setdefault("lost_location", "Unknown")
+            params.setdefault("lost_description", "No description provided")
+            params.setdefault("lost_date", datetime.date.today().isoformat())
             payload = await _require(params, ["item_name", "lost_location", "lost_date", "lost_description"])
             payload["lost_date"] = _resolve_single_date(payload["lost_date"])
             payload.update({
