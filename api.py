@@ -516,3 +516,6 @@ async def upload_file(file: UploadFile = File(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
+
+# Trigger reload config
+
