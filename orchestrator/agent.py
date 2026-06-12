@@ -46,6 +46,7 @@ async def stream_text_word_by_word(text: str, *, end: str = "\n") -> None:
 
     if end:
         sys.stdout.write(end.replace("\n", "<br/>"))
+        sys.stdout.write("\n")
         sys.stdout.flush()
 
 

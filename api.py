@@ -378,9 +378,9 @@ async def stream_query(request: Request):
                     last_pos = len(text)
                     # process new_text line-by-line
                     for raw_line in new_text.splitlines():
-                        line_stripped = raw_line.strip()
-                        if not line_stripped:
+                        if not raw_line:
                             continue
+                        line_stripped = raw_line.strip()
 
                         # Detect markers exactly (they are printed on their own lines)
                         if line_stripped == MARKER_REASONING_START:
@@ -409,8 +409,8 @@ async def stream_query(request: Request):
                             continue
 
                         # Content lines: emit using current_section if set, otherwise default to "output"
-                        cleaned = clean_line(line_stripped)
-                        if cleaned:
+                        cleaned = clean_line(raw_line)
+                        if cleaned != "":
                             yield sse_event(cleaned, event_type=current_section or "output")
 
             # Ensure any remaining output is processed after task completes
@@ -419,18 +419,18 @@ async def stream_query(request: Request):
             final_text = captured_output.read()
             if len(final_text) > last_pos:
                 for raw_line in final_text[last_pos:].splitlines():
-                    line_stripped = raw_line.strip()
-                    if not line_stripped:
+                    if not raw_line:
                         continue
-                    cleaned = clean_line(line_stripped)
-                    if cleaned:
-                        # Try to detect markers one last time
-                        if line_stripped == MARKER_FINAL_START:
-                            yield sse_event("", event_type="final_start")
-                            continue
-                        if line_stripped == MARKER_FINAL_END:
-                            yield sse_event("", event_type="final_end")
-                            continue
+                    line_stripped = raw_line.strip()
+                    # Try to detect markers one last time
+                    if line_stripped == MARKER_FINAL_START:
+                        yield sse_event("", event_type="final_start")
+                        continue
+                    if line_stripped == MARKER_FINAL_END:
+                        yield sse_event("", event_type="final_end")
+                        continue
+                    cleaned = clean_line(raw_line)
+                    if cleaned != "":
                         yield sse_event(cleaned, event_type="final")
 
             yield sse_event("[DONE]", event_type="done")

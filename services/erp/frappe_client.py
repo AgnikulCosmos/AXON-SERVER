@@ -13,7 +13,10 @@ _frappe_request_headers: ContextVar[dict | None] = ContextVar(
 
 
 def _get_frappe_url() -> str:
-    return os.getenv("FRAPPE_URL", "http://localhost:8000").rstrip("/")
+    url = os.getenv("FRAPPE_URL", "http://localhost:8000").rstrip("/")
+    if os.path.exists("/.dockerenv"):
+        url = url.replace("localhost", "host.docker.internal").replace("127.0.0.1", "host.docker.internal")
+    return url
 
 
 def set_frappe_request_headers(headers: dict | None):
