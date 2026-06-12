@@ -327,11 +327,21 @@ def _normalize_erp_support_response(raw_response: dict) -> dict[str, Any]:
 
 async def execute_leave_tracker_query(params: dict) -> dict[str, Any]:
     from services.erp.mcp_registry import get_pr_leave_tracker_mcp
+    import logging
+    logger = logging.getLogger("orchestrator")
     try:
         response = await get_pr_leave_tracker_mcp()
+        logger.info(f"[LeaveTracker] Raw API response: {response}")
         counts = {}
         if isinstance(response, dict):
-            counts = response.get("message") or {}
+            msg = response.get("message")
+            if isinstance(msg, dict):
+                counts = msg
+            elif isinstance(msg, list) and len(msg) > 0:
+                # Some Frappe APIs return a list of allocations
+                counts = {"_list": msg}
+            else:
+                counts = response  # fallback: use full response dict
         
         return {
             "status": "ok",
@@ -343,32 +353,82 @@ async def execute_leave_tracker_query(params: dict) -> dict[str, Any]:
 
 
 def _format_leave_tracker(counts: dict) -> str:
-    # If the counts is the wrapped response containing "leave_balances" (new API)
+    import logging
+    logger = logging.getLogger("orchestrator")
+    logger.info(f"[LeaveTracker] Formatting counts: {counts}")
+
+    # Handle list-style response (Frappe returns a list of leave allocation dicts)
+    if isinstance(counts, dict) and "_list" in counts:
+        items = counts["_list"]
+        for item in items:
+            lt = item.get("leave_type", "")
+            if lt in ("Casual & Sick Leave", "Casual/Sick Leave", "Casual Leave", "Sick Leave"):
+                taken = float(item.get("leaves_taken", 0) or 0)
+                total = float(item.get("total_leaves_allocated", 0) or 0)
+                remaining = float(item.get("remaining_leaves", 0) or
+                                  item.get("balance", 0) or
+                                  item.get("available", 0) or
+                                  max(0, total - taken))
+                return (
+                    f"Leave Balance Summary\n"
+                    f"Category: Casual & Sick Leave\n"
+                    f"Taken: {taken} days\n"
+                    f"Remaining Balance: {remaining} days (out of {int(total)})"
+                )
+        # If no Casual/Sick found, show first item
+        if items:
+            item = items[0]
+            taken = float(item.get("leaves_taken", 0) or 0)
+            total = float(item.get("total_leaves_allocated", 0) or 0)
+            remaining = float(item.get("remaining_leaves", 0) or
+                              item.get("balance", 0) or
+                              item.get("available", 0) or
+                              max(0, total - taken))
+            lt = item.get("leave_type", "Leave")
+            return (
+                f"Leave Balance Summary\n"
+                f"Category: {lt}\n"
+                f"Taken: {taken} days\n"
+                f"Remaining Balance: {remaining} days (out of {int(total)})"
+            )
+        return "No leave records found for your account."
+
+    # Handle dict-style response with "leave_balances" wrapper
     if isinstance(counts, dict) and "leave_balances" in counts:
         balances = counts["leave_balances"] or {}
     else:
         balances = counts or {}
 
-    # Find Casual & Sick Leave / Casual/Sick Leave
+    # Find Casual & Sick Leave entry (try all known key names)
     casual_sick_info = None
-    for key, info in balances.items():
-        if key in ("Casual & Sick Leave", "Casual/Sick Leave"):
-            casual_sick_info = info
+    for key in ("Casual & Sick Leave", "Casual/Sick Leave", "Casual Leave", "Sick Leave"):
+        if key in balances:
+            casual_sick_info = balances[key]
             break
 
     if not casual_sick_info or not isinstance(casual_sick_info, dict):
+        logger.warning(f"[LeaveTracker] Could not find Casual & Sick Leave in: {list(balances.keys())}")
         return "No Casual & Sick Leave tracker records found for your account."
 
-    taken = casual_sick_info.get("taken", 0.0)
-    # New API uses "available", old uses "balance"
-    remaining = casual_sick_info.get("available") if "available" in casual_sick_info else casual_sick_info.get("balance", 0.0)
+    taken = float(casual_sick_info.get("taken", 0) or 0)
+    total = float(casual_sick_info.get("total", 0) or
+                  casual_sick_info.get("allocated", 0) or
+                  casual_sick_info.get("total_leaves_allocated", 0) or 12)
+    # Prefer explicit remaining field; fallback to computing from total - taken
+    remaining = (
+        casual_sick_info.get("available") or
+        casual_sick_info.get("balance") or
+        casual_sick_info.get("remaining") or
+        casual_sick_info.get("remaining_leaves")
+    )
     if remaining is None:
-        remaining = 0.0
+        remaining = max(0.0, total - taken)
+    remaining = float(remaining)
 
-    md = []
-    md.append("Leave Balance Summary")
-    md.append(f"Category: Casual & Sick Leave")
-    md.append(f"Taken: {taken} days")
-    md.append(f"Remaining Balance: {remaining} days (out of 12)")
-    
-    return "\n".join(md)
+    return (
+        f"Leave Balance Summary\n"
+        f"Category: Casual & Sick Leave\n"
+        f"Taken: {taken} days\n"
+        f"Remaining Balance: {remaining} days (out of {int(total)})"
+    )
+
