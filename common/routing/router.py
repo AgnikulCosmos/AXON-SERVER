@@ -82,6 +82,12 @@ async def route_query(query: str) -> str:
     if result is not None:
         return result
 
+    # Fallback to pr_leave_tracker if query contains leave/leaves (and is not a policy question)
+    if "leave" in q or "leaves" in q:
+        if not any(k in q for k in ["policy", "policies", "rules", "guidelines"]):
+            logger.info(f"[Router] Forcing Leave Tracker fallback for query: {query!r}")
+            return "ERP_ROUTE:pr_leave_tracker"
+
     # Fallback to RAG if query contains Agnikul/company keywords
     company_keywords = {"agnikul", "cosmos", "agnibaan", "agnilet", "dhanush"}
     if any(k in q for k in company_keywords):
