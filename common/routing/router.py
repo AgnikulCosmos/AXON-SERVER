@@ -63,6 +63,15 @@ async def route_query(query: str) -> str:
         logger.info(f"[Router] Intercepted base model query: {query!r}")
         return "GREETING_RESPONSE:I cannot disclose the details of the base model here."
 
+    identity_queries = {
+        "who are you", "what is your name", "who is axon", "tell me about yourself",
+        "what are your capabilities", "what can you do", "what are you capable of",
+        "introduce yourself", "what can axon do for me", "what can axon help with"
+    }
+    if q in identity_queries:
+        logger.info(f"[Router] Intercepted identity query: {query!r}")
+        return "IDENTITY"
+
     _who_match = re.search(r'\bwho\s+is\b', q)
     if _who_match and not any(name in q for name in AGNIKUL_PEOPLE):
         logger.info(f"[Router] Forcing TOOLS for public-figure query: {query!r}")

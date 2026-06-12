@@ -334,7 +334,16 @@ async def contextualize_query_with_history(query: str, session_id: str | None) -
 
         query_lower_check = query.lower()
         
-        # 1. Bypass if any specific Agnikul or ERP domain term is present
+        # 1. Bypass if the query does not contain any ambiguous pronouns
+        PRONOUN_PATTERN = re.compile(
+            r'\b(it|he|she|they|this|that|him|her|them|its|his|their|these|those)\b',
+            re.IGNORECASE
+        )
+        if not PRONOUN_PATTERN.search(query):
+            logger.info(f"[Query Contextualizer] Bypassing rewrite — no ambiguous pronouns in query: {query!r}")
+            return query
+
+        # 2. Bypass if any specific Agnikul or ERP domain term is present
         if any(entity in query_lower_check for entity in KNOWN_ENTITIES):
             logger.info(f"[Query Contextualizer] Bypassing rewrite — known entity/domain keyword in query: {query!r}")
             return query
