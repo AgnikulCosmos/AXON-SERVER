@@ -255,3 +255,43 @@ User Query:
 
 Respond ONLY with the JSON object of extracted parameters:
 """
+
+
+CONFIRM_ROUTE_PROMPT = """Task: Determine if the User Message matches the intent of the Action Description.
+
+Action Description: {route_desc}
+User Message: "{query}"
+
+Rules:
+- Select 1 (Yes) if the User Message matches the specific intent (creating, listing, viewing, checking, or performing) described in the Action Description.
+- Select 2 (No) if the User Message is a greeting, general chat, asking about your identity/capabilities, asking a public world knowledge question, or completely unrelated to the Action Description.
+
+Examples:
+- Action Description: Report a lost item or found item.
+  User Message: "I lost my keys" -> Answer: 1
+- Action Description: Report a lost item or found item.
+  User Message: "hello there" -> Answer: 2
+- Action Description: View details of a ticket by ID.
+  User Message: "track ERP_I_72" -> Answer: 1
+
+Answer with only the number 1 or 2:"""
+
+
+DISAMBIGUATE_ROUTE_PROMPT = """Task: Decide if the user query is asking to "create" a new entry or "view" existing entries.
+
+Category: {category}
+
+Rules for "create":
+- The user wants to submit, raise, report, create, add, open, file, register, or write a NEW item/ticket/feedback/suggestion.
+- Examples: "I lost my wallet", "Submit a feedback", "I want to raise a ticket", "report a bug", "create a suggestion", "give feedback".
+
+Rules for "view":
+- The user wants to show, check, list, view, read, search, or see EXISTING items/tickets/feedback/suggestions.
+- Examples: "list lost and found", "show my tickets", "view feedback list", "check my suggestions".
+
+Query: "{query}"
+
+Output exactly one word: "create" or "view". Do not include any other text, reasoning, or punctuation.
+
+Answer:"""
+

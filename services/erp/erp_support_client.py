@@ -232,7 +232,7 @@ async def execute_erp_support_plan(plan: dict) -> dict:
     if route_name == "lost_found_create":
         from services.erp.mcp_registry import create_lost_found
         status = params.get("status") or "Pending"
-        if status == "Found" or "name" in params:
+        if status == "Found" or params.get("name"):
             payload = await _require(params, ["name", "found_location", "found_date", "found_description"])
             payload["found_date"] = _resolve_single_date(payload["found_date"])
             payload.update({

@@ -3,7 +3,7 @@ from common.routing.greeting import get_greeting_response, is_greeting
 from common.constants import MODEL_KEYWORDS, AGNIKUL_PEOPLE, LLM_MODEL
 from common.routing.intent_router import IntentRouter
 from common.llm.ollama_helper import get_working_ollama_base_url
-from prompts.routing import GREETING_SYSTEM_PROMPT
+from prompts.routing import GREETING_SYSTEM_PROMPT, CONFIRM_ROUTE_PROMPT, DISAMBIGUATE_ROUTE_PROMPT
 from typing import Optional
 import re
 import logging
@@ -32,10 +32,10 @@ def _get_router_llm():
 _intent_router: IntentRouter | None = None
 
 
-def _get_intent_router() -> IntentRouter:
+def _get_intent_router(threshold: Optional[float] = None) -> IntentRouter:
     global _intent_router
     if _intent_router is None:
-        _intent_router = IntentRouter()
+        _intent_router = IntentRouter(threshold=threshold)
     return _intent_router
 
 
@@ -49,6 +49,85 @@ async def generate_greeting_response(query: str) -> str:
     prompt = f"{GREETING_SYSTEM_PROMPT}\n\nUser Greeting: {query}\n\nAxon Response:"
     resp = await _get_router_llm().ainvoke(prompt)
     return resp.content.strip()
+
+
+from common.routing.intent_router import TOP_LEVEL_CATEGORIES, ERP_ROUTE_NAMES
+
+async def _confirm_route_with_llm(query: str, route_desc: str) -> bool:
+    from common.llm.ollama_helper import get_working_ollama_base_url
+    import ollama
+    import os
+    import re
+
+    prompt = CONFIRM_ROUTE_PROMPT.format(route_desc=route_desc, query=query)
+
+    try:
+        model = os.getenv("LLM_MODEL", "qwen2.5:0.5b")
+        async with ollama.AsyncClient(host=get_working_ollama_base_url()) as client:
+            resp = await client.generate(
+                model=model,
+                prompt=prompt,
+                options={"temperature": 0.0, "num_predict": 5}
+            )
+            ans = resp.get("response", "").strip()
+            ans = re.sub(r'[^0-9]', '', ans)
+            logger.info(f"[LLM CONFIRMATION] Query: {query!r} | Desc: {route_desc!r} | Ans: {ans!r}")
+            if "1" in ans:
+                return True
+    except Exception as e:
+        logger.warning(f"Failed to confirm route with LLM: {e}")
+
+    return False
+
+
+async def _disambiguate_route_with_llm(query: str, route_name: str) -> str:
+    category = None
+    if "ticket" in route_name:
+        category = "ticket"
+    elif "feedback" in route_name:
+        category = "feedback"
+    elif "suggestion" in route_name:
+        category = "suggestion"
+    elif "lost_found" in route_name or re.search(r'\b(lost|found)\b', query.lower()):
+        category = "lost_found"
+
+    if not category:
+        return route_name
+
+    if category == "ticket":
+        options = {"create": "erp_tickets_create", "view": "erp_tickets_list"}
+    elif category == "feedback":
+        options = {"create": "erp_feedback_create", "view": "erp_feedback_list"}
+    elif category == "suggestion":
+        options = {"create": "erp_suggestion_create", "view": "erp_suggestions_list"}
+    else:  # lost_found
+        options = {"create": "lost_found_create", "view": "lost_found_list"}
+
+    from common.llm.ollama_helper import get_working_ollama_base_url
+    import ollama
+    import os
+
+    prompt = DISAMBIGUATE_ROUTE_PROMPT.format(category=category.upper(), query=query.strip().capitalize())
+
+    try:
+        model = os.getenv("LLM_MODEL", "qwen2.5:0.5b")
+        async with ollama.AsyncClient(host=get_working_ollama_base_url()) as client:
+            resp = await client.generate(
+                model=model,
+                prompt=prompt,
+                options={"temperature": 0.0, "num_predict": 5}
+            )
+            ans = resp.get("response", "").strip().lower()
+            ans = re.sub(r'[^a-z]', '', ans)
+            logger.info(f"[LLM DISAMBIGUATION] Query: {query!r} | Category: {category} | Ans: {ans!r}")
+            if ans in options:
+                logger.info(f"[LLM DISAMBIGUATION] Selected {ans} -> {options[ans]} for query {query!r}")
+                return options[ans]
+    except Exception as e:
+        logger.warning(f"Failed to disambiguate route with LLM: {e}")
+
+    return route_name
+
 
 
 async def route_query(query: str) -> str:
@@ -77,21 +156,32 @@ async def route_query(query: str) -> str:
         logger.info(f"[Router] Forcing TOOLS for public-figure query: {query!r}")
         return "TOOLS"
 
-    router = _get_intent_router()
-    result = router.classify(query)
-    if result is not None:
-        return result
+    # Hybrid Semantic-LLM classifier
+    router = _get_intent_router(threshold=0.45)
+    semantic = router._get_semantic()
+    match_result = semantic.match(query) if semantic else None
 
-    # Fallback to pr_leave_tracker if query contains leave/leaves (and is not a policy question)
-    if "leave" in q or "leaves" in q:
-        if not any(k in q for k in ["policy", "policies", "rules", "guidelines"]):
-            logger.info(f"[Router] Forcing Leave Tracker fallback for query: {query!r}")
-            return "ERP_ROUTE:pr_leave_tracker"
+    if match_result:
+        route_name = match_result["route"]["route_name"]
+        confidence = match_result["confidence"]
 
-    # Fallback to RAG if query contains Agnikul/company keywords
-    company_keywords = {"agnikul", "cosmos", "agnibaan", "agnilet", "dhanush"}
-    if any(k in q for k in company_keywords):
-        logger.info(f"[Router] Forcing RAG fallback for company query: {query!r}")
-        return "RAG"
+        logger.info(f"[Router] Semantic candidate match: {route_name} with confidence {confidence:.4f}")
+
+        # 1. Verification/Confirmation for low confidence
+        if confidence < 0.75:
+            route_desc = match_result["route"].get("description", "")
+            is_valid = await _confirm_route_with_llm(query, route_desc)
+            if not is_valid:
+                logger.info(f"[Router] LLM rejected candidate match {route_name} for query {query!r}")
+                route_name = "QWEN"
+
+        # 2. Create vs List Disambiguation
+        if route_name != "QWEN":
+            route_name = await _disambiguate_route_with_llm(query, route_name)
+
+        if route_name in TOP_LEVEL_CATEGORIES:
+            return route_name
+        elif route_name in ERP_ROUTE_NAMES:
+            return f"ERP_ROUTE:{route_name}"
 
     return "QWEN"

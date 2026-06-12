@@ -26,7 +26,7 @@ async def dispatch_tool(query: str):
         forced_tool = "ddgs"
         query = query[len("/ddgs"):].lstrip()
 
-    tool = forced_tool if forced_tool else _infer_tool(query)
+    tool = forced_tool if forced_tool else await _infer_tool_with_llm(query)
 
     if tool not in TOOL_ENDPOINTS:
         return tool, f"Unknown tool: {tool}"
@@ -88,6 +88,49 @@ async def dispatch_tool(query: str):
 
         return tool, f"Tool {tool} failed to execute."
 
+
+
+async def _infer_tool_with_llm(query: str) -> str:
+    # First, quick keyword shortcut overrides (zero latency)
+    q = query.lower()
+    if "wiki" in q or "wikipedia" in q:
+        return "wiki"
+    if "arxiv" in q or "paper" in q or "research" in q:
+        return "arxiv"
+
+    # Otherwise, let Qwen decide dynamically!
+    from common.llm.ollama_helper import get_working_ollama_base_url
+    import ollama
+    
+    prompt = f"""You are a routing assistant. Given a user query, choose the most appropriate search tool to use.
+Options:
+- "wiki": For encyclopedic, historical, concept, or biographical queries (e.g., "who is Albert Einstein", "what is photosynthesis", general knowledge).
+- "arxiv": For scientific, academic, research papers, or deep technical literature queries (e.g., "recent papers on LLM agent reasoning", "quantum computing research").
+- "ddgs": For general search, news, current events, weather, shopping, or topics not covered by wiki/arxiv.
+
+Output exactly one word from the options: "wiki", "arxiv", or "ddgs". Do not include any punctuation, quotes, or conversational text.
+
+Query: {query}
+Tool:"""
+    try:
+        model = os.getenv("LLM_MODEL", "qwen2.5:0.5b")
+        async with ollama.AsyncClient(host=get_working_ollama_base_url()) as client:
+            resp = await client.generate(
+                model=model,
+                prompt=prompt,
+                options={"temperature": 0.0, "num_predict": 10}
+            )
+            ans = resp.get("response", "").strip().lower()
+            # Clean up the output in case the model added quotes or whitespace
+            ans = re.sub(r'[^a-z]', '', ans)
+            if ans in ["wiki", "arxiv", "ddgs"]:
+                logging.info(f"[TOOL INFERENCE] Qwen successfully selected tool: {ans} for query: {query!r}")
+                return ans
+    except Exception as e:
+        logging.warning(f"Failed to infer tool with LLM: {e}. Falling back to default.")
+    
+    # Fallback to default keyword-based inference
+    return _infer_tool(query)
 
 
 def _infer_tool(query: str) -> str:

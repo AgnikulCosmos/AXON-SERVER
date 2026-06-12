@@ -225,7 +225,7 @@
   },
   {
     "route_name": "pr_leave_tracker",
-    "description": "check pr leave tracker, view pr leave tracker details, fields include year, total leaves taken, employee id, leave counts, approved leave requests, check casual/sick leave balance, how many leaves remaining",
+    "description": "Track, check, view, or list the user's leave balance, remaining holidays, casual leaves, or leave summary. Use this when the user wants to check how many leaves they have left, or view leave history/balance.",
     "examples": [
       "track my leaves",
       "how many leaves have I taken",
@@ -236,7 +236,9 @@
       "how many casual leaves do I have left",
       "check my sick leave balance",
       "available casual and sick leaves",
-      "what is my casual leave balance"
+      "what is my casual leave balance",
+      "how many leaves do I have left?",
+      "check my leave balance"
     ],
     "doctype": "Leave Tracker",
     "frappe_method": "payroll_management.v2.leaves.get_balance",
@@ -484,7 +486,7 @@
   },
   {
     "route_name": "erp_tickets_create",
-    "description": "Raise, create, or lodge an ERP Support ticket. Use this when the user wants to report an issue, bug, failure, or complaint about an ERP application or module. It handles priority levels like P0, P1, P2, P3, application names, module names, issue dates, roles, descriptions, and attachments.",
+    "description": "Create or raise a new ERP Support ticket/request for an application. Use this when the user wants to file a new ticket, raise support, report a bug/issue, or open a ticket. Do not use for listing existing tickets.",
     "examples": [
       "raise a ticket for erp issue",
       "create a support ticket in erp",
@@ -494,7 +496,10 @@
       "create a ticket for the HR app",
       "I want to report a bug in the Finance module",
       "raise a P0 ticket for dashboard in uhjkm app with description D",
-      "create an ERP ticket for app uhjkm module Dashboard priority P0"
+      "create an ERP ticket for app uhjkm module Dashboard priority P0",
+      "I need to create a support ticket",
+      "raise a ticket",
+      "create a support ticket"
     ],
     "doctype": "ERP_Tickets",
     "frappe_method": "erp_support.put_api.create",
@@ -609,12 +614,15 @@
   },
   {
     "route_name": "erp_feedback_create",
-    "description": "Create ERP Support feedback or review for an ERP application. Use this when the user wants to submit feedback, give a review, or rate an ERP app.",
+    "description": "Create or submit new ERP Support feedback, rating, or review for an application. Use this when the user wants to submit feedback, give feedback, write feedback, or rate an application. Do not use for listing.",
     "examples": [
       "give feedback for uhjkm app saying S with rating 4",
       "submit a review for Payroll app rating 5",
       "create ERP support feedback for app uhjkm feedback S ratings 4",
-      "I want to give feedback for the dashboard app"
+      "I want to give feedback for the dashboard app",
+      "Submit a feedback",
+      "give feedback",
+      "submit feedback"
     ],
     "doctype": "ERP_Feedback_Suggestions",
     "frappe_method": "erp_support.put_api.create",
@@ -675,12 +683,14 @@
   },
   {
     "route_name": "erp_suggestion_create",
-    "description": "Create ERP Support suggestion for an ERP application. Use this when the user wants to suggest an improvement, feature, change, or enhancement for an ERP app.",
+    "description": "Create or submit a new ERP Support suggestion or recommendation for an application. Use this when the user wants to suggest an improvement, feature, change, or enhancement for an ERP app. Do not use for listing.",
     "examples": [
       "give a suggestion for uhjkm app priority Medium feedback d helps d",
       "submit an ERP suggestion for HR app",
       "suggest an improvement for Dashboard with medium priority",
-      "create suggestion for app uhjkm with feedback d and helps d"
+      "create suggestion for app uhjkm with feedback d and helps d",
+      "create a suggestion",
+      "submit a suggestion"
     ],
     "doctype": "ERP_Feedback_Suggestions",
     "frappe_method": "erp_support.put_api.create",
@@ -749,14 +759,16 @@
   },
   {
     "route_name": "erp_tickets_list",
-    "description": "List, show, or view ERP Support tickets visible to the logged-in user. Employees should only see tickets raised by themselves, as enforced by the ERP Support API session user.",
+    "description": "List, show, view, or check existing ERP Support tickets. Use this to see list of tickets, show tickets, or list requests. Do not use for creating/raising new tickets.",
     "examples": [
       "show my ERP tickets",
       "list my support tickets",
       "view tickets I raised",
       "show my ERP support requests",
       "what is the status of my support tickets",
-      "show my ticket history"
+      "show my ticket history",
+      "list my tickets",
+      "show my tickets"
     ],
     "doctype": "ERP_Tickets",
     "frappe_method": "erp_support.get_api.get_tickets",
@@ -787,13 +799,15 @@
   },
   {
     "route_name": "erp_feedback_list",
-    "description": "List, show, or view ERP Support feedback and reviews visible to the logged-in user.",
+    "description": "List, show, view, or check existing ERP Support feedbacks and reviews. Use this to see a list of feedback, show feedback, or list reviews. Do not use for creating/submitting.",
     "examples": [
       "show ERP feedback",
       "list feedback reviews",
       "show my ERP reviews",
       "view feedback for ERP apps",
-      "show support feedback"
+      "show support feedback",
+      "list feedback",
+      "show my feedback"
     ],
     "doctype": "ERP_Feedback_Suggestions",
     "frappe_method": "erp_support.get_api.get_fb_sg",
@@ -823,7 +837,7 @@
   },
   {
     "route_name": "erp_suggestions_list",
-    "description": "List, show, or view ERP Support suggestions visible to the logged-in user. Employees should only see suggestions raised by themselves, as enforced by the ERP Support API session user.",
+    "description": "List, show, view, or check existing ERP Support suggestions. Use this to see list of suggestions, show suggestions, or list recommendations. Do not use for creating/submitting.",
     "examples": [
       "show my ERP suggestions",
       "list suggestions I raised",
@@ -895,14 +909,17 @@
   },
   {
     "route_name": "lost_found_create",
-    "description": "Report a lost item, record an item as lost, or mark/update a lost item as found. Use this when the user says they lost something (like a phone, keys, charger, card) or found a lost item.",
+    "description": "Create or submit a report for a lost item, report a found item, or register a lost/found record. Use this when the user says they lost something (e.g. phone, keys, wallet) or found something. Do not use for listing.",
     "examples": [
       "I lost my phone in the canteen today",
       "report a lost item keys in corridor",
       "mark LF-26-0526-08242 as found",
       "I found the keys at reception",
       "mark my lost item as found",
-      "record lost charger in lab"
+      "record lost charger in lab",
+      "I lost my wallet today",
+      "report a lost item",
+      "register a found item"
     ],
     "doctype": "Lost And Found",
     "frappe_method": "core.factory.api.post_data",
@@ -947,13 +964,14 @@
   },
   {
     "route_name": "lost_found_list",
-    "description": "List, show, or view lost and found items or records. Use this when the user wants to see what has been reported lost.",
+    "description": "List, show, view, or check reported lost and found items. Use this to see what items have been reported lost or found. Do not use for reporting/creating.",
     "examples": [
       "show all lost items",
       "list lost and found records",
       "show lost ones",
       "what items are lost?",
-      "list lost items"
+      "list lost items",
+      "List lost and found"
     ],
     "doctype": "Lost And Found",
     "frappe_method": "core.factory.api.get_data",
@@ -981,17 +999,20 @@
   },
   {
     "route_name": "track_request",
-    "description": "Track a request status or view details of any ERP support ticket, feedback, suggestion, or food log record by its reference ID. Use this when the user provides a known ID like ERP_I_xxx, ERP-SF-xx-xxxx, or a food request ID.",
+    "description": "Track a request status or view details of any ERP support ticket, feedback, suggestion, or food log record by its reference ID. Use this when the user provides a known ID like ERP_I_xxx, ERP-SF-xx-xxxx, or LF-xx-xxxx.",
     "examples": [
       "track request PC-2026-0001",
       "status of MM-2026-0003",
       "check ticket ERP_I_9876",
-      "what is the status of MT-2026-0005?",
+      "what is the status of MM-2026-0005?",
       "view details of my request PC-06-26-1024",
       "track ERP-SF-06-0034",
       "check status of feedback ERP-SF-06-0010",
       "what is the status of my ERP ticket ERP_I_14",
-      "show me details of ERP-SF-06-0033"
+      "show me details of ERP-SF-06-0033",
+      "Track ERP_I_72",
+      "check status of ERP-SF-06-8634",
+      "track LF-26-0526-08242"
     ],
     "doctype": "",
     "frappe_method": "",

@@ -138,7 +138,7 @@ async def execute_food_log_query(params: dict) -> dict[str, Any]:
     elif to_res:
         start_dt, end_dt = to_res[0], to_res[1]
     else:
-        start_dt = today - timedelta(days=today.weekday())
+        start_dt = today - timedelta(days=7)
         end_dt = today
 
     f_dt = start_dt.strftime("%d-%m-%Y")
@@ -203,8 +203,8 @@ def _format_food_log(data: dict, date_range: str) -> str:
         return f"No food booking records found for the period **{date_range}**."
         
     md = []
-    md.append(f"### Food Booking Log Summary ({date_range})")
-    md.append(f"- **Total Booked:** {counts.get('Booked', 0)} | **Consumed:** {counts.get('Consumed', 0)} | **Not Consumed:** {counts.get('Not Consumed', 0)}")
+    md.append(f"Food Booking Log Summary ({date_range})")
+    md.append(f"Total Booked: {counts.get('Booked', 0)} | Consumed: {counts.get('Consumed', 0)} | Not Consumed: {counts.get('Not Consumed', 0)}")
     md.append("\n| Request Date | Location | Meal Type | Status |")
     md.append("| :--- | :--- | :--- | :--- |")
     for r in records:
