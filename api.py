@@ -517,5 +517,5 @@ async def upload_file(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
 
-# Trigger reload config: switch to qwen2.5:1.5b
+# Trigger reload config: switch to qwen2.5:0.5b
 
