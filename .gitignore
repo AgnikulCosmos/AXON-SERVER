@@ -68,3 +68,8 @@ chroma_data/
 
 # ===== Testing =====
 .pytest_cache/
+
+# ===== Auto-generated Semantic Router Cache =====
+# These are rebuilt at runtime from routes.json — do NOT commit them
+common/routing/planning/route_embeddings.npy
+common/routing/planning/route_mappings.json
