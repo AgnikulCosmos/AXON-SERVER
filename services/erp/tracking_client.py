@@ -193,7 +193,7 @@ def format_tracking_response(normalized: dict) -> str:
     if customs:
         lines.append("Additional Specifications:")
         for k, v in customs.items():
-            lines.append(f"- {k}: {v}")
+            lines.append(f"{k}: {v}")
 
     return "\n\n".join(lines)
 
