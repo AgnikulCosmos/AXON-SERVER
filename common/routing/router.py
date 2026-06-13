@@ -130,12 +130,59 @@ async def _disambiguate_route_with_llm(query: str, route_name: str) -> str:
 
 
 
+# ── Domain keyword vocabulary for typo correction ──────────────────────────
+# Words the semantic router cares about. difflib will fuzzy-match user words
+# against this list and replace close-enough matches before embedding.
+_ERP_VOCAB = {
+    "leave", "balance", "show", "check", "track", "status", "request",
+    "food", "canteen", "booking", "log", "meal", "dinner", "lunch", "breakfast",
+    "ticket", "feedback", "suggestion", "create", "submit", "raise", "report",
+    "lost", "found", "item", "management", "support", "erp",
+    "fleet", "hr", "payroll", "finance", "inventory", "procurement",
+    "casual", "sick", "allocated", "remaining", "taken",
+}
+
+def _normalize_query(query: str) -> str:
+    """
+    Correct obvious typos in domain-specific words before embedding.
+    Only fixes words that are >=4 chars and have a close match (cutoff 0.70)
+    so short words and proper nouns are left untouched.
+    """
+    import difflib
+    words = query.split()
+    corrected = []
+    for word in words:
+        # Strip punctuation for matching, preserve it for output
+        stripped = word.strip("!?.,;:'\"").lower()
+        if len(stripped) >= 4 and stripped not in _ERP_VOCAB:
+            matches = difflib.get_close_matches(stripped, _ERP_VOCAB, n=1, cutoff=0.70)
+            if matches:
+                # Replace the stripped part, preserving original case pattern and surrounding punctuation
+                prefix = word[: len(word) - len(word.lstrip("!?.,;:'\""))]
+                suffix = word[len(word.rstrip("!?.,;:'\"")):]
+                fixed = matches[0]
+                # Preserve capitalisation if original word started with uppercase
+                if word and word[0].isupper():
+                    fixed = fixed.capitalize()
+                corrected.append(prefix + fixed + suffix)
+                logger.debug(f"[QueryNormalizer] Corrected {stripped!r} → {matches[0]!r}")
+                continue
+        corrected.append(word)
+    return " ".join(corrected)
+
+
 async def route_query(query: str) -> str:
     if contains_profanity(query):
         return "PROFANITY"
 
     if is_greeting(query):
         return f"GREETING_RESPONSE:{get_greeting_response()}"
+
+    # Normalize query — fix domain-specific typos before embedding lookup
+    normalized_query = _normalize_query(query)
+    if normalized_query != query:
+        logger.info(f"[Router] Typo corrected: {query!r} → {normalized_query!r}")
+    query = normalized_query
 
     q = query.lower().strip("!?.,'")
     if any(k in q for k in MODEL_KEYWORDS):
