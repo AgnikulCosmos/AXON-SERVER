@@ -368,12 +368,16 @@ async def stream_query(request: Request):
             session_id = body.get("session_id")
             task = asyncio.create_task(run_agent(question, frappe_headers_from_request(request), session_id))
 
+            last_ping_time = asyncio.get_event_loop().time()
             # While the agent is running, repeatedly check for new output and yield it
             while not task.done():
                 await asyncio.sleep(0.08)  # poll interval; adjust for desired responsiveness
                 captured_output.seek(0)
                 text = captured_output.read()
+                
+                has_output = False
                 if len(text) > last_pos:
+                    has_output = True
                     new_text = text[last_pos:]
                     last_pos = len(text)
                     # process new_text line-by-line
@@ -412,6 +416,14 @@ async def stream_query(request: Request):
                         cleaned = clean_line(raw_line)
                         if cleaned != "":
                             yield sse_event(cleaned, event_type=current_section or "output")
+
+                # Send keep-alive ping comment if idle for > 1.0 second
+                current_time = asyncio.get_event_loop().time()
+                if has_output:
+                    last_ping_time = current_time
+                elif current_time - last_ping_time > 1.0:
+                    yield ": ping\n\n"
+                    last_ping_time = current_time
 
             # Ensure any remaining output is processed after task completes
             await task  # propagate errors if any

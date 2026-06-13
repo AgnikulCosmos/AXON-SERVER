@@ -37,8 +37,26 @@ async def dispatch_tool(query: str):
     logging.info(f"[TOOL DISPATCH] Tool={tool}, URL={url}, Q={clean_q}")
 
     try:
-        response = await asyncio.to_thread(requests.get, url, params={"q": clean_q}, timeout=25)
-        response.raise_for_status()
+        try:
+            # First attempt with container hostname
+            response = await asyncio.to_thread(requests.get, url, params={"q": clean_q}, timeout=10)
+            response.raise_for_status()
+        except Exception as first_err:
+            logging.warning(f"[TOOL DISPATCH] First attempt failed for tool={tool} URL={url}: {first_err}. Attempting fallback to host IP...")
+            from urllib.parse import urlparse, urlunparse
+            from services.erp.frappe_client import _get_frappe_url
+            parsed = urlparse(url)
+            frappe_url = _get_frappe_url()
+            parsed_frappe = urlparse(frappe_url)
+            fallback_host = parsed_frappe.hostname or "host.docker.internal"
+            
+            netloc = f"{fallback_host}:{parsed.port}" if parsed.port else fallback_host
+            fallback_url = urlunparse(parsed._replace(netloc=netloc))
+            logging.info(f"[TOOL DISPATCH] Fallback URL: {fallback_url}")
+            
+            # Use fallback URL
+            response = await asyncio.to_thread(requests.get, fallback_url, params={"q": clean_q}, timeout=15)
+            response.raise_for_status()
 
         if tool == "arxiv":
             try:
@@ -50,19 +68,44 @@ async def dispatch_tool(query: str):
 
     except Exception as e:
         logging.error(f"[TOOL DISPATCH ERROR] Tool={tool} Error={e}")
-        if tool == "arxiv":
-            logging.info(f"[TOOL DISPATCH FALLBACK] Attempting DDGS fallback for arXiv query: {clean_q}")
+        if tool in ("arxiv", "wiki"):
+            logging.info(f"[TOOL DISPATCH FALLBACK] Attempting DDGS fallback for {tool} query: {clean_q}")
             ddgs_url = TOOL_ENDPOINTS["ddgs"]
-            fallback_query = f"site:arxiv.org {clean_q}"
+            fallback_query = f"site:arxiv.org {clean_q}" if tool == "arxiv" else clean_q
             try:
-                ddgs_resp = await asyncio.to_thread(
-                    requests.get, 
-                    ddgs_url, 
-                    params={"q": fallback_query}, 
-                    timeout=15
-                )
-                ddgs_resp.raise_for_status()
+                # Attempt with default url first
+                try:
+                    ddgs_resp = await asyncio.to_thread(
+                        requests.get, 
+                        ddgs_url, 
+                        params={"q": fallback_query}, 
+                        timeout=10
+                    )
+                    ddgs_resp.raise_for_status()
+                except Exception as ddgs_first_err:
+                    logging.warning(f"[TOOL DISPATCH FALLBACK] Default DDGS URL failed: {ddgs_first_err}. Trying host IP...")
+                    from urllib.parse import urlparse, urlunparse
+                    from services.erp.frappe_client import _get_frappe_url
+                    parsed = urlparse(ddgs_url)
+                    frappe_url = _get_frappe_url()
+                    parsed_frappe = urlparse(frappe_url)
+                    fallback_host = parsed_frappe.hostname or "host.docker.internal"
+                    netloc = f"{fallback_host}:{parsed.port}" if parsed.port else fallback_host
+                    fallback_ddgs_url = urlunparse(parsed._replace(netloc=netloc))
+                    
+                    ddgs_resp = await asyncio.to_thread(
+                        requests.get,
+                        fallback_ddgs_url,
+                        params={"q": fallback_query},
+                        timeout=15
+                    )
+                    ddgs_resp.raise_for_status()
+                
                 ddgs_data = ddgs_resp.json()
+                if tool == "wiki":
+                    logging.info(f"[TOOL DISPATCH FALLBACK SUCCESS] Successfully retrieved wiki query via DDGS")
+                    return "ddgs", ddgs_data
+                
                 results = ddgs_data.get("results", [])
                 
                 if not results:

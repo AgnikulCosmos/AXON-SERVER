@@ -173,25 +173,25 @@ def format_tracking_response(normalized: dict) -> str:
         
     # Standard Request Details Formatting
     md = []
-    md.append(f"### Request Tracking Details: **{normalized['id']}**")
-    md.append(f"- **Application:** `{normalized['app_name']}`")
-    md.append(f"- **Request Type:** {normalized['type']}")
-    md.append(f"- **Status:** `{normalized['status']}`")
-    md.append(f"- **Raised By:** {normalized['raised_by']}")
+    md.append(f"Request Tracking Details: {normalized['id']}")
+    md.append(f"Application: {normalized['app_name']}")
+    md.append(f"Request Type: {normalized['type']}")
+    md.append(f"Status: {normalized['status']}")
+    md.append(f"Raised By: {normalized['raised_by']}")
     if normalized.get("created_at"):
-        md.append(f"- **Created At:** {normalized['created_at']}")
+        md.append(f"Created At: {normalized['created_at']}")
     if normalized.get("assigned_to"):
-        md.append(f"- **Assigned To:** {normalized['assigned_to']}")
+        md.append(f"Assigned To: {normalized['assigned_to']}")
     if normalized.get("priority"):
-        md.append(f"- **Priority:** {normalized['priority']}")
+        md.append(f"Priority: {normalized['priority']}")
         
-    md.append(f"\n**Summary / Description:**\n> {normalized['description'] or normalized['title'] or 'No description provided.'}")
+    md.append(f"Summary / Description: {normalized['description'] or normalized['title'] or 'No description provided.'}")
     
     customs = {k: v for k, v in normalized["custom_details"].items() if v not in (None, "")}
     if customs:
-        md.append("\n**Additional Specifications:**")
+        md.append("\nAdditional Specifications:")
         for k, v in customs.items():
-            md.append(f"- **{k}:** {v}")
+            md.append(f"{k}: {v}")
             
     return "\n".join(md)
 
@@ -200,16 +200,15 @@ def _format_food_log(data: dict, date_range: str) -> str:
     counts = data.get("counts", {})
     
     if not records or (len(records) == 1 and not records[0].get("Request Date")):
-        return f"No food booking records found for the period **{date_range}**."
+        return f"No food booking records found for the period {date_range}."
         
     md = []
     md.append(f"Food Booking Log Summary ({date_range})")
     md.append(f"Total Booked: {counts.get('Booked', 0)} | Consumed: {counts.get('Consumed', 0)} | Not Consumed: {counts.get('Not Consumed', 0)}")
-    md.append("\n| Request Date | Location | Meal Type | Status |")
-    md.append("| :--- | :--- | :--- | :--- |")
+    md.append("\nBookings:")
     for r in records:
         if r.get("Request Date"):
-            md.append(f"| {r['Request Date']} | {r.get('Location', 'N/A')} | {r.get('Type')} | `{r.get('Status')}` |")
+            md.append(f"- {r['Request Date']} | {r.get('Type')} | {r.get('Status')} | {r.get('Location', 'N/A')}")
             
     return "\n".join(md)
 
@@ -370,7 +369,7 @@ def _format_leave_tracker(counts: dict) -> str:
                                   item.get("available", 0) or
                                   max(0, total - taken))
                 return (
-                    f"Leave Balance Summary\n"
+                    f"Leave Balance Summary\n\n"
                     f"Category: Casual & Sick Leave\n"
                     f"Taken: {taken} days\n"
                     f"Remaining Balance: {remaining} days (out of {int(total)})"
@@ -386,7 +385,7 @@ def _format_leave_tracker(counts: dict) -> str:
                               max(0, total - taken))
             lt = item.get("leave_type", "Leave")
             return (
-                f"Leave Balance Summary\n"
+                f"Leave Balance Summary\n\n"
                 f"Category: {lt}\n"
                 f"Taken: {taken} days\n"
                 f"Remaining Balance: {remaining} days (out of {int(total)})"
@@ -426,7 +425,7 @@ def _format_leave_tracker(counts: dict) -> str:
     remaining = float(remaining)
 
     return (
-        f"Leave Balance Summary\n"
+        f"Leave Balance Summary\n\n"
         f"Category: Casual & Sick Leave\n"
         f"Taken: {taken} days\n"
         f"Remaining Balance: {remaining} days (out of {int(total)})"
