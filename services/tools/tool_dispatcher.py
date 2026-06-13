@@ -1,0 +1,211 @@
+import requests
+import logging
+import re
+import asyncio
+
+logging.basicConfig(level=logging.INFO)
+
+
+import os
+
+TOOL_ENDPOINTS = {
+    "wiki": os.getenv("WIKI_URL", "http://wiki:8002/query"),
+    "ddgs": os.getenv("DDGS_URL", "http://ddgs:8005/query"),
+    "arxiv": os.getenv("ARXIV_URL", "http://arxiv:8003/query"),
+}
+
+async def dispatch_tool(query: str):
+    forced_tool = None
+    if query.startswith("/arxiv"):
+        forced_tool = "arxiv"
+        query = query[len("/arxiv"):].lstrip()
+    elif query.startswith("/wiki"):
+        forced_tool = "wiki"
+        query = query[len("/wiki"):].lstrip()
+    elif query.startswith("/ddgs"):
+        forced_tool = "ddgs"
+        query = query[len("/ddgs"):].lstrip()
+
+    tool = forced_tool if forced_tool else await _infer_tool_with_llm(query)
+
+    if tool not in TOOL_ENDPOINTS:
+        return tool, f"Unknown tool: {tool}"
+
+    url = TOOL_ENDPOINTS[tool]
+    clean_q = _clean_query(query, tool)
+
+    logging.info(f"[TOOL DISPATCH] Tool={tool}, URL={url}, Q={clean_q}")
+
+    try:
+        try:
+            # First attempt with container hostname
+            response = await asyncio.to_thread(requests.get, url, params={"q": clean_q}, timeout=10)
+            response.raise_for_status()
+        except Exception as first_err:
+            logging.warning(f"[TOOL DISPATCH] First attempt failed for tool={tool} URL={url}: {first_err}. Attempting fallback to host IP...")
+            from urllib.parse import urlparse, urlunparse
+            from services.erp.frappe_client import _get_frappe_url
+            parsed = urlparse(url)
+            frappe_url = _get_frappe_url()
+            parsed_frappe = urlparse(frappe_url)
+            fallback_host = parsed_frappe.hostname or "host.docker.internal"
+            
+            netloc = f"{fallback_host}:{parsed.port}" if parsed.port else fallback_host
+            fallback_url = urlunparse(parsed._replace(netloc=netloc))
+            logging.info(f"[TOOL DISPATCH] Fallback URL: {fallback_url}")
+            
+            # Use fallback URL
+            response = await asyncio.to_thread(requests.get, fallback_url, params={"q": clean_q}, timeout=15)
+            response.raise_for_status()
+
+        if tool == "arxiv":
+            try:
+                return tool, response.json()
+            except Exception:
+                return tool, response.text  
+
+        return tool, response.json()
+
+    except Exception as e:
+        logging.error(f"[TOOL DISPATCH ERROR] Tool={tool} Error={e}")
+        if tool in ("arxiv", "wiki"):
+            logging.info(f"[TOOL DISPATCH FALLBACK] Attempting DDGS fallback for {tool} query: {clean_q}")
+            ddgs_url = TOOL_ENDPOINTS["ddgs"]
+            fallback_query = f"site:arxiv.org {clean_q}" if tool == "arxiv" else clean_q
+            try:
+                # Attempt with default url first
+                try:
+                    ddgs_resp = await asyncio.to_thread(
+                        requests.get, 
+                        ddgs_url, 
+                        params={"q": fallback_query}, 
+                        timeout=10
+                    )
+                    ddgs_resp.raise_for_status()
+                except Exception as ddgs_first_err:
+                    logging.warning(f"[TOOL DISPATCH FALLBACK] Default DDGS URL failed: {ddgs_first_err}. Trying host IP...")
+                    from urllib.parse import urlparse, urlunparse
+                    from services.erp.frappe_client import _get_frappe_url
+                    parsed = urlparse(ddgs_url)
+                    frappe_url = _get_frappe_url()
+                    parsed_frappe = urlparse(frappe_url)
+                    fallback_host = parsed_frappe.hostname or "host.docker.internal"
+                    netloc = f"{fallback_host}:{parsed.port}" if parsed.port else fallback_host
+                    fallback_ddgs_url = urlunparse(parsed._replace(netloc=netloc))
+                    
+                    ddgs_resp = await asyncio.to_thread(
+                        requests.get,
+                        fallback_ddgs_url,
+                        params={"q": fallback_query},
+                        timeout=15
+                    )
+                    ddgs_resp.raise_for_status()
+                
+                ddgs_data = ddgs_resp.json()
+                if tool == "wiki":
+                    logging.info(f"[TOOL DISPATCH FALLBACK SUCCESS] Successfully retrieved wiki query via DDGS")
+                    return "ddgs", ddgs_data
+                
+                results = ddgs_data.get("results", [])
+                
+                if not results:
+                    return tool, "No relevant academic papers found via fallback search."
+                    
+                lines = []
+                for i, res in enumerate(results, start=1):
+                    title = res.get("title", "Unknown Title").replace(" - arXiv.org", "")
+                    abstract = res.get("body", "No abstract available.")
+                    url = res.get("href", "")
+                    lines.append(
+                        f"{i}. {title}\n"
+                        f"* Abstract: {abstract}...\n"
+                        f"* [Read Paper on arXiv]({url})\n\n"
+                        f"---"
+                    )
+                
+                formatted_fallback = "\n\n".join(lines)
+                logging.info(f"[TOOL DISPATCH FALLBACK SUCCESS] Successfully retrieved {len(results)} papers via DDGS")
+                return "arxiv", formatted_fallback
+            except Exception as fallback_err:
+                logging.error(f"[TOOL DISPATCH FALLBACK ERROR] Fallback failed: {fallback_err}")
+
+        return tool, f"Tool {tool} failed to execute."
+
+
+
+async def _infer_tool_with_llm(query: str) -> str:
+    # First, quick keyword shortcut overrides (zero latency)
+    q = query.lower()
+    if "wiki" in q or "wikipedia" in q:
+        return "wiki"
+    if "arxiv" in q or "paper" in q or "research" in q:
+        return "arxiv"
+
+    # Otherwise, let Qwen decide dynamically!
+    from common.llm.ollama_helper import get_working_ollama_base_url
+    import ollama
+    
+    prompt = f"""You are a routing assistant. Given a user query, choose the most appropriate search tool to use.
+Options:
+- "wiki": For encyclopedic, historical, concept, or biographical queries (e.g., "who is Albert Einstein", "what is photosynthesis", general knowledge).
+- "arxiv": For scientific, academic, research papers, or deep technical literature queries (e.g., "recent papers on LLM agent reasoning", "quantum computing research").
+- "ddgs": For general search, news, current events, weather, shopping, or topics not covered by wiki/arxiv.
+
+Output exactly one word from the options: "wiki", "arxiv", or "ddgs". Do not include any punctuation, quotes, or conversational text.
+
+Query: {query}
+Tool:"""
+    try:
+        model = os.getenv("LLM_MODEL", "qwen2.5:0.5b")
+        async with ollama.AsyncClient(host=get_working_ollama_base_url()) as client:
+            resp = await client.generate(
+                model=model,
+                prompt=prompt,
+                options={"temperature": 0.0, "num_predict": 10}
+            )
+            ans = resp.get("response", "").strip().lower()
+            # Clean up the output in case the model added quotes or whitespace
+            ans = re.sub(r'[^a-z]', '', ans)
+            if ans in ["wiki", "arxiv", "ddgs"]:
+                logging.info(f"[TOOL INFERENCE] Qwen successfully selected tool: {ans} for query: {query!r}")
+                return ans
+    except Exception as e:
+        logging.warning(f"Failed to infer tool with LLM: {e}. Falling back to default.")
+    
+    # Fallback to default keyword-based inference
+    return _infer_tool(query)
+
+
+def _infer_tool(query: str) -> str:
+    q = query.lower()
+    if "wiki" in q or "wikipedia" in q:
+        return "wiki"
+    if "arxiv" in q or "paper" in q or "research" in q:
+        return "arxiv"
+    return "ddgs"
+
+
+def _clean_query(query: str, tool: str) -> str:
+    q = query.strip()
+
+    if tool == "wiki":
+        # Extract the actual search phrase from user intent like "Search wiki for quantum physics"
+        q = q.lower()
+        q = re.sub(r"\b(search|find|look up|lookup|show|tell me|what is|what are|who is|who are)\b", " ", q)
+        q = re.sub(r"\b(wiki|wikipedia)\b", " ", q)
+        q = re.sub(r"\b(for|about|on|page|summary)\b", " ", q)
+        q = re.sub(r"\s+", " ", q).strip()
+        return q.title() or query
+
+    if tool == "arxiv":
+        q = q.lower()
+        q = re.sub(r"\b(search|find|look up|lookup|show|papers?|research|citation|doi|arxiv|recent|latest|new|current|modern)\b", " ", q)
+        q = re.sub(r"\b(for|about|on|page|summary)\b", " ", q)
+        q = re.sub(r"\s+", " ", q).strip()
+        return q or query
+
+    # Default external search tool cleanup
+    q = re.sub(r"\b(use|search|find|look up|lookup|for|about|wiki|wikipedia|arxiv|paper|research|ddgs|ddg)\b", " ", q, flags=re.IGNORECASE)
+    q = re.sub(r"\s+", " ", q).strip()
+    return q or query
+

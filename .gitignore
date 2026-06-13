@@ -19,9 +19,12 @@ dist/
 *.log
 logs/
 
-# Local environment files
-.env
-.env.*
+# Environment files
+.env          # machine-local: APP_ENV selector (create this per machine)
+.env.local    # machine-local: local dev overrides
+!.env.test    # tracked: test server URLs (no secrets)
+!.env.prod    # tracked: prod server URLs (no secrets)
+!.env.example # tracked: template for new developers
 
 # ===== Node / Next.js =====
 node_modules/
@@ -39,7 +42,7 @@ build/
 export/
 
 # Node environment files
-.env.local
+# .env.local
 .env.development.local
 .env.test.local
 .env.production.local
@@ -61,6 +64,12 @@ index/
 # ===== Application Data =====
 uploads/
 chroma_langchain_db/
+chroma_data/
 
 # ===== Testing =====
 .pytest_cache/
+
+# ===== Auto-generated Semantic Router Cache =====
+# These are rebuilt at runtime from routes.json — do NOT commit them
+common/routing/planning/route_embeddings.npy
+common/routing/planning/route_mappings.json

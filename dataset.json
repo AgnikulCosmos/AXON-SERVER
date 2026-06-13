@@ -173,22 +173,33 @@
     "id": "mission_sorted_001",
     "source": "Mission Achievements",
     "title": "Agnibaan SOrTeD Mission-01 Launch Date and Location",
-    "content": "Agnibaan SOrTeD Mission-01 was launched on 30 May 2024 at 07:15 IST from Agnikul Launchpad-01. Agnikul Launchpad-01 is India's first private launchpad located at SDSC-SHAR, ISRO.",
+    "content": "Agnikul Cosmos has launched one rocket: Agnibaan SOrTeD Mission-01, launched on 30 May 2024 at 07:15 IST from Agnikul Launchpad-01, India's first private launchpad located at SDSC-SHAR, ISRO.",
     "intent_tags": [
       "fact",
       "definition"
     ],
     "keywords": [
+      "rocket",
+      "launch",
+      "launched",
+      "Agnibaan",
       "Mission-01",
       "30 May 2024",
+      "2024",
       "Agnikul Launchpad-01",
       "SHAR",
-      "private launchpad"
+      "private launchpad",
+      "first launch"
     ],
     "questions": [
       "When was SOrTeD Mission-01 launched?",
       "Where was SOrTeD Mission-01 launched from?",
-      "What is Agnikul Launchpad-01?"
+      "What is Agnikul Launchpad-01?",
+      "How many rockets has Agnikul Cosmos launched?",
+      "How many rockets Agnikul cosmos launched?",
+      "Has Agnikul launched any rockets?",
+      "When did Agnikul launch its first rocket?",
+      "What rockets has Agnikul launched?"
     ]
   },
   {
@@ -3823,8 +3834,12 @@
     ],
     "questions": [
       "What is Dhanush?",
+      "What about Dhanush?",
+      "Tell me about Dhanush",
+      "Explain Dhanush",
       "Does Agnikul have a launchpad?",
-      "What is the mobile launch pedestal?"
+      "What is the mobile launch pedestal?",
+      "What is Agnikul's mobile launch pedestal?"
     ]
   },
   {
@@ -4359,22 +4374,42 @@
     ]
   },
   {
-    "id": "insurance_food_fields_001",
+    "id": "insurance_status_options_001",
     "source": "HR Employee Profile",
-    "title": "Insurance Status and Food Preference",
-    "content": "Insurance Status indicates whether an employee has active coverage and can be Insured, Not Insured, Expired, or Insurance Terminated. Food Preference allows selection between Veg and Non Veg for catering or event arrangements.",
+    "title": "Insurance Status Options",
+    "content": "Insurance Status indicates whether an employee has active coverage and can be Insured, Not Insured, Expired, or Insurance Terminated.",
     "intent_tags": [
       "definition"
     ],
     "keywords": [
       "insurance status",
-      "food preference",
-      "veg",
-      "non veg"
+      "insured",
+      "not insured",
+      "expired",
+      "insurance terminated"
     ],
     "questions": [
       "What insurance status options are available?",
-      "What should I select in food preference?"
+      "How do I check my insurance status?"
+    ]
+  },
+  {
+    "id": "food_preference_profile_001",
+    "source": "HR Employee Profile",
+    "title": "Food Preference in Employee Profile",
+    "content": "Food Preference allows selection between Veg and Non Veg for catering or event arrangements.",
+    "intent_tags": [
+      "definition"
+    ],
+    "keywords": [
+      "food preference",
+      "veg",
+      "non veg",
+      "catering"
+    ],
+    "questions": [
+      "What should I select in food preference?",
+      "Can I choose my dietary preference in the profile?"
     ]
   },
   {
@@ -16259,6 +16294,155 @@
     "questions": [
       "What are the key stages in the structured appraisal process?",
       "How does the clear workflow of the appraisal application help in ensuring consistent and fair evaluations?"
+    ]
+  },
+  {
+    "id": "crew_management_leave_request_001",
+    "source": "Crew Management - Leave",
+    "title": "Raising a Leave Request",
+    "content": "To raise a leave request, open ERP, navigate to Crew Management, select Raise Request from the menu, and click Leave. In the leave form, select the Leave Type, choose the From Date and To Date, enter a Reason for the leave, and click Submit.",
+    "intent_tags": [
+      "procedure",
+      "how_to"
+    ],
+    "keywords": [
+      "raise leave",
+      "leave request",
+      "apply leave",
+      "crew management leave"
+    ],
+    "questions": [
+      "How do I raise a leave request?",
+      "Where do I go to apply for leave?",
+      "What details are needed to request a leave?",
+      "How do I request a leave in Crew Management?"
+    ]
+  },
+  {
+    "id": "crew_management_id_card_request_001",
+    "source": "Crew Management - ID Card",
+    "title": "Raising an ID Card Request",
+    "content": "To raise an ID card request, open ERP, navigate to Crew Management, select Raise Request from the menu, and click ID Card. In the form, select the Reason for the new ID card request and click Submit.",
+    "intent_tags": [
+      "procedure",
+      "how_to"
+    ],
+    "keywords": [
+      "raise id card",
+      "id card request",
+      "new id card",
+      "crew management id card"
+    ],
+    "questions": [
+      "How do I request a new ID card?",
+      "Where do I go to raise an ID card request?",
+      "What information is required for an ID card request?",
+      "How do I submit an ID card request?"
+    ]
+  },
+  {
+    "id": "crew_management_permission_request_001",
+    "source": "Crew Management - Permission",
+    "title": "Raising a Permission Request",
+    "content": "To raise a Permission request, open ERP, navigate to Crew Management, select Raise Request from the menu, and click Permission. In the form, select the Date, enter the From Time and To Time, provide a Reason, and click Submit.",
+    "intent_tags": [
+      "procedure",
+      "how_to"
+    ],
+    "keywords": [
+      "raise permission",
+      "permission request",
+      "crew management permission"
+    ],
+    "questions": [
+      "How do I request a permission?",
+      "Where do I go to raise a permission request?",
+      "What details are required for a permission request?",
+      "How do I submit a permission request?"
+    ]
+  },
+  {
+    "id": "crew_management_travel_accommodation_request_001",
+    "source": "Crew Management - Travel / Accomodation",
+    "title": "Raising a Travel / Accommodation Request",
+    "content": "To raise a Travel / Accommodation request, open ERP, navigate to Crew Management, select Raise Request from the menu, and click Travel / Accomodation. Choose whether you are requesting for Project or Crew, select the Crew Name, specify Age, Phone number, and check the boxes for Travel and/or Accomodation. Fill in the location, dates, times, and purpose details as required, then click Submit.",
+    "intent_tags": [
+      "procedure",
+      "how_to"
+    ],
+    "keywords": [
+      "raise travel",
+      "travel accommodation request",
+      "crew management travel"
+    ],
+    "questions": [
+      "How do I request travel or accommodation?",
+      "Where do I go to raise a travel request?",
+      "What information is needed for travel and accommodation request?",
+      "How do I submit a travel request?"
+    ]
+  },
+  {
+    "id": "crew_management_reimbursement_request_001",
+    "source": "Crew Management - Reimbursement",
+    "title": "Raising a Reimbursement Request",
+    "content": "To raise a Reimbursement request, open ERP, navigate to Crew Management, select Raise Request from the menu, and click Reimbursement. Choose whether you are requesting for Project or Crew, select the Crew Name, select the Category, enter the Reimbursement Value and Description, click Add Entry, and then click Submit.",
+    "intent_tags": [
+      "procedure",
+      "how_to"
+    ],
+    "keywords": [
+      "raise reimbursement",
+      "reimbursement request",
+      "crew management reimbursement"
+    ],
+    "questions": [
+      "How do I request a reimbursement?",
+      "Where do I go to raise a reimbursement request?",
+      "What details are required for a reimbursement request?",
+      "How do I submit a reimbursement request?"
+    ]
+  },
+  {
+    "id": "crew_management_attendance_request_001",
+    "source": "Crew Management - Attendance",
+    "title": "Raising an Attendance Request",
+    "content": "To raise an Attendance request, open ERP, navigate to Crew Management, select Raise Request from the menu, and click Attendance. Choose whether you are requesting for Project or Crew, select the Crew Name, fill in the Work Type, Date, From/To Time, Reason under the Add Attendance section, click Add, and then click Submit.",
+    "intent_tags": [
+      "procedure",
+      "how_to"
+    ],
+    "keywords": [
+      "raise attendance",
+      "attendance request",
+      "crew management attendance"
+    ],
+    "questions": [
+      "How do I request attendance correction?",
+      "Where do I go to raise an attendance request?",
+      "What details are needed for an attendance request?",
+      "How do I submit an attendance request?"
+    ]
+  },
+  {
+    "id": "crew_management_bonafide_request_001",
+    "source": "Crew Management - Bonafide",
+    "title": "Raising a Bonafide Request",
+    "content": "To raise a Bonafide request, open ERP, navigate to Crew Management, select Raise Request from the menu, and click Bonafide. Select the Bonafide Category (Employment letter and/or Residence address proof letter), select the Purpose, select the Required By date, enter optional Notes, and click Submit.",
+    "intent_tags": [
+      "procedure",
+      "how_to"
+    ],
+    "keywords": [
+      "raise bonafide",
+      "bonafide request",
+      "crew management bonafide"
+    ],
+    "questions": [
+      "How do I request a bonafide letter?",
+      "Where do I go to raise a bonafide request?",
+      "What information is required for a bonafide request?",
+      "How do I submit a bonafide request?"
     ]
   }
 ]

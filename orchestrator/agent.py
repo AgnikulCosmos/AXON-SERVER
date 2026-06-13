@@ -5,9 +5,9 @@ import os
 
 
 from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-# from tools.registry import TOOLS
+from prompts.agent import SYSTEM_PROMPT
 
 # Markers for frontend parsing
 MARKER_REASONING_START = "<<<REASONING_START>>>"
@@ -37,7 +37,7 @@ async def stream_text_word_by_word(text: str, *, end: str = "\n") -> None:
         if tok == "":
             continue
 
-        sys.stdout.write(tok)
+        sys.stdout.write(tok.replace("\n", "<br/>"))
         sys.stdout.flush()
 
         # Only delay after non-whitespace tokens, so newlines are instant
@@ -45,7 +45,8 @@ async def stream_text_word_by_word(text: str, *, end: str = "\n") -> None:
             await asyncio.sleep(WORD_STREAM_DELAY)
 
     if end:
-        sys.stdout.write(end)
+        sys.stdout.write(end.replace("\n", "<br/>"))
+        sys.stdout.write("\n")
         sys.stdout.flush()
 
 
@@ -61,7 +62,7 @@ async def stream_text_word_by_word(text: str, *, end: str = "\n") -> None:
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 
 llm = ChatOllama(
-    model="axon-5.6:latest",
+    model=os.getenv("LLM_MODEL", "qwen2.5:0.5b"),
     base_url=OLLAMA_BASE_URL,
     temperature=0.3,
     top_p=0.9,
@@ -71,6 +72,7 @@ llm = ChatOllama(
 
 
 # Bind tools to model
+TOOLS = []
 #llm_with_tools = llm.bind_tools(TOOLS)
 ENABLE_TOOLS = False
 if ENABLE_TOOLS:
@@ -79,18 +81,7 @@ else:
     llm_with_tools = llm
 
 
-# System prompt
-SYSTEM_PROMPT = """
-You are AXON, the intelligent assistant for Agnikul Cosmos.
 
-You can:
-- Answer general knowledge questions
-- Answer ERP and operational questions
-- Use tools when required to fetch or act on information
-
-Use tools ONLY when necessary.
-If no tool is needed, answer directly.
-"""
 
 
 async def run_axon(question: str, max_iterations: int = 5) -> str:
@@ -100,7 +91,10 @@ async def run_axon(question: str, max_iterations: int = 5) -> str:
 
     """
 
-    messages = [HumanMessage(content=question)]
+    messages = [
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(content=question)
+    ]
     
     for iteration in range(max_iterations):
         try:
@@ -124,7 +118,6 @@ async def run_axon(question: str, max_iterations: int = 5) -> str:
             # Check for tool calls (native LangChain feature)
             # Check for tool calls ONLY if tools are enabled
             if ENABLE_TOOLS and response.tool_calls:
-
                 for tool_call in response.tool_calls:
                     tool_name = tool_call["name"]
                     tool_args = tool_call["args"]
@@ -132,13 +125,13 @@ async def run_axon(question: str, max_iterations: int = 5) -> str:
                     
                     # Emit tool section
                     sys.stdout.write(f"{MARKER_TOOL_START}\n")
-                    sys.stdout.write(f"🔧 Requested tool: {tool_name}\n")
+                    sys.stdout.write(f"Requested tool: {tool_name}\n")
                     sys.stdout.flush()
                     
                     # Find and execute tool
                     tool = next((t for t in TOOLS if t.name == tool_name), None)
                     if not tool:
-                        error_msg = f"❌ Error: Unknown tool '{tool_name}'"
+                        error_msg = f"Error: Unknown tool '{tool_name}'"
                         sys.stdout.write(error_msg + "\n")
                         sys.stdout.write(f"{MARKER_TOOL_END}\n")
                         sys.stdout.flush()
@@ -146,14 +139,14 @@ async def run_axon(question: str, max_iterations: int = 5) -> str:
                         # Add error to messages
                         messages.append(response)
                         messages.append(ToolMessage(
-                            content=error_msg,
-                            tool_call_id=tool_id
+                             content=error_msg,
+                             tool_call_id=tool_id
                         ))
                         continue
                     
                     try:
                         # Execute tool
-                        sys.stdout.write(f"⚙️ Calling tool with input: {tool_args}\n")
+                        sys.stdout.write(f"Calling tool with input: {tool_args}\n")
                         sys.stdout.flush()
                         
                         # Invoke tool (supports both sync and async)
@@ -163,12 +156,12 @@ async def run_axon(question: str, max_iterations: int = 5) -> str:
                             result = tool.func(**tool_args)
                         
                         # Emit result (streamed)
-                        sys.stdout.write("✅ Tool result:\n")
+                        sys.stdout.write("Tool result:\n")
                         sys.stdout.flush()
                         await stream_text_word_by_word(str(result), end="\n")
                         sys.stdout.write(f"{MARKER_TOOL_END}\n")
                         sys.stdout.flush()
-
+ 
                         
                         # Add tool result to messages
                         messages.append(response)
@@ -178,7 +171,7 @@ async def run_axon(question: str, max_iterations: int = 5) -> str:
                         ))
                         
                     except Exception as e:
-                        error_msg = f"❌ Tool error: {str(e)}"
+                        error_msg = f"Tool error: {str(e)}"
                         sys.stdout.write(error_msg + "\n")
                         sys.stdout.write(f"{MARKER_TOOL_END}\n")
                         sys.stdout.flush()

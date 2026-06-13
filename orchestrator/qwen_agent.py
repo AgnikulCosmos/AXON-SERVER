@@ -7,28 +7,20 @@ from orchestrator.agent import (
 )
 
 import os
+import sys
+import re
+import asyncio
+
+from common.llm.ollama_helper import get_working_ollama_base_url
+from common.constants import LLM_MODEL
+from prompts.agent import AXON_IDENTITY_PROMPT, SUMMARIZE_TOOL_OUTPUT_PROMPT
+
 qwen_llm = ChatOllama(
-    model="qwen2.5:0.5b",
-    base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434"),
+    model=LLM_MODEL,
+    base_url=get_working_ollama_base_url(),
     temperature=0.2,
-    streaming=False
+    streaming=True
 )
-
-AXON_IDENTITY_PROMPT = """
-You are Axon.
-
-Axon is an internal ERP AI assistant used inside the organization.
-Your role is to assist with ERP-related concepts, workflows, terminology,
-and operational guidance.
-
-Behavior rules:
-- Your name is Axon.
-- You are an internal system assistant, not a public chatbot.
-- Do not describe yourself as a language model.
-- Do not invent ERP data.
-- If information is unavailable, say so clearly.
-- Keep responses professional and concise.
-"""
 
 
 async def run_qwen(query: str) -> str:
@@ -37,33 +29,117 @@ async def run_qwen(query: str) -> str:
         HumanMessage(content=query),
     ]
 
-    response = await qwen_llm.ainvoke(messages)
-    return response.content
+    full_content = []
+    async for chunk in qwen_llm.astream(messages):
+        content = chunk.content
+        sys.stdout.write(content.replace("\n", "<br/>"))
+        sys.stdout.flush()
+        full_content.append(content)
+    return "".join(full_content)
+
+class StreamingCleaner:
+    def __init__(self):
+        self.buffer = ""
+        self.header_processed = False
+
+    def process_chunk(self, chunk: str) -> str:
+        if self.header_processed:
+            out = chunk.replace("&lt;", "<").replace("&gt;", ">")
+            self.buffer += out
+            if len(self.buffer) > 15:
+                flush_len = len(self.buffer) - 15
+                to_flush = self.buffer[:flush_len]
+                self.buffer = self.buffer[flush_len:]
+                return to_flush
+            return ""
+        else:
+            self.buffer += chunk
+            if len(self.buffer) >= 30 or "\n" in self.buffer or " " in self.buffer:
+                stripped = self.buffer.lstrip()
+                match = re.match(r'^```[a-zA-Z0-9]*\s*', stripped)
+                if match:
+                    self.buffer = stripped[match.end():]
+                self.header_processed = True
+                
+                out = self.buffer.replace("&lt;", "<").replace("&gt;", ">")
+                self.buffer = ""
+                if len(out) > 15:
+                    flush_len = len(out) - 15
+                    to_flush = out[:flush_len]
+                    self.buffer = out[flush_len:]
+                    return to_flush
+                else:
+                    self.buffer = out
+                    return ""
+            return ""
+
+    def finalize(self) -> str:
+        final_chunk = self.buffer
+        final_chunk = re.sub(r'\s*```\s*$', '', final_chunk)
+        final_chunk = final_chunk.replace("&lt;", "<").replace("&gt;", ">")
+        return final_chunk
+
 
 async def summarize_tool_output(
     user_query: str,
     tool_name: str,
-    tool_data: dict
+    tool_data: any
 ) -> str:
-    prompt = f"""
-The user asked:
-{user_query}
+    if tool_name == "ddgs" and isinstance(tool_data, dict):
+        results = tool_data.get("results", [])
+        for res in results:
+            url = res.get("href")
+            if url and not url.endswith("#duckduckgo"):
+                res["href"] = url + "#duckduckgo"
 
-The following information was retrieved using the tool "{tool_name}":
+    if tool_name == "arxiv":
+        formatted_data = str(tool_data)
+        for line in formatted_data.split("\n"):
+            sys.stdout.write(line + "<br/>")
+            sys.stdout.flush()
+            await asyncio.sleep(0.01)
+        return formatted_data
 
-{tool_data}
-
-Your task:
-- Summarize this information clearly for the user
-- Be concise and professional
-- Do NOT mention tools, APIs, JSON, or internal processing
-- If results are empty, say that no relevant information was found
-"""
+    if False:
+        pass
+    else:
+        prompt = SUMMARIZE_TOOL_OUTPUT_PROMPT.format(user_query=user_query, tool_data=tool_data)
 
     messages = [
         SystemMessage(content=AXON_IDENTITY_PROMPT),
         HumanMessage(content=prompt),
     ]
 
-    response = await qwen_llm.ainvoke(messages)
-    return response.content
+    cleaner = StreamingCleaner()
+    full_content = []
+    async for chunk in qwen_llm.astream(messages):
+        content = chunk.content
+        processed = cleaner.process_chunk(content)
+        if processed:
+            sys.stdout.write(processed.replace("\n", "<br/>"))
+            sys.stdout.flush()
+            full_content.append(processed)
+
+    final_processed = cleaner.finalize()
+    if final_processed:
+        sys.stdout.write(final_processed.replace("\n", "<br/>"))
+        sys.stdout.flush()
+        full_content.append(final_processed)
+
+    response_str = "".join(full_content)
+    if tool_name == "ddgs" and isinstance(tool_data, dict):
+        results = tool_data.get("results", [])
+        sources = []
+        for res in results[:3]:
+            title = res.get("title", "Source").strip()
+            title = re.sub(r'[\[\]]', '', title)  # clean brackets
+            url = res.get("href")
+            if url:
+                sources.append(f"[{title}]({url})")
+        if sources:
+            sources_str = "\n\n**Sources:** " + " | ".join(sources)
+            sys.stdout.write(sources_str.replace("\n", "<br/>"))
+            sys.stdout.flush()
+            response_str += sources_str
+
+    return response_str

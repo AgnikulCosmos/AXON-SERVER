@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: orchestrator/Dockerfile
     ports:
-      - "8004:8000"
+      - "8006:8000"
     volumes:
       - .:/app
       - ./chroma_langchain_db:/app/chroma_langchain_db
@@ -13,36 +13,50 @@ services:
       - arxiv
       - ddgs
       - ollama
+      - chroma
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
+      # FRAPPE_URL is NOT set here — config_loader.py reads it from .env / .env.{APP_ENV}
+      # which are mounted via the volume below. This prevents shell-env leakage.
+      FRAPPE_TIMEOUT: 300
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   wiki:
     build:
       context: .
-      dockerfile: services/wiki/Dockerfile
+      dockerfile: services/tools/wiki/Dockerfile
     ports:
       - "8002:8002"
 
   arxiv:
     build:
       context: . 
-      dockerfile: services/arxiv/Dockerfile
+      dockerfile: services/tools/arxiv/Dockerfile
     ports:
       - "8003:8003"
 
   ddgs:
     build:
       context: .
-      dockerfile: services/ddgs/Dockerfile
+      dockerfile: services/tools/ddgs/Dockerfile
     ports:
       - "8005:8005"
 
   ollama:
     image: ollama/ollama:latest
     volumes:
-      - /usr/share/ollama/.ollama:/root/.ollama
-      - /home/harinit-automation/Documents/axon_5.6:/models/axon_5.6:ro
+      - ollama_data:/root/.ollama
     restart: unless-stopped
+
+  chroma:
+    image: chromadb/chroma:0.5.23
+    ports:
+      - "8007:8000"
+    volumes:
+      - ./chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
 
 volumes:
   ollama_data:
