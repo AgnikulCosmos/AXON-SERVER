@@ -185,7 +185,9 @@ def _load_vector_store():
     # If Chroma is running in docker or reachable via port 8007, load it
     try:
         store = get_chroma_store()
-        # Verify it works
+        # Verify it works and is not empty
+        if store._collection.count() == 0:
+            raise ValueError("Collection has 0 documents (empty).")
         _ = store.similarity_search("test", k=1)
         _vector_store = store
         return _vector_store
