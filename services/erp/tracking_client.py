@@ -359,6 +359,16 @@ def _format_leave_tracker(counts: dict) -> str:
     logger = logging.getLogger("orchestrator")
     logger.info(f"[LeaveTracker] Formatting counts: {counts}")
 
+    def _render(leave_type: str, taken: float, total: float, remaining: float) -> str:
+        lines = [
+            "Leave Balance Summary",
+            f"Category: {leave_type}",
+            f"Taken: {taken} days",
+            f"Total Allocated: {int(total)} days",
+            f"Remaining Balance: {remaining} days",
+        ]
+        return "\n".join(lines)
+
     # Handle list-style response (Frappe returns a list of leave allocation dicts)
     if isinstance(counts, dict) and "_list" in counts:
         items = counts["_list"]
@@ -371,12 +381,7 @@ def _format_leave_tracker(counts: dict) -> str:
                                   item.get("balance", 0) or
                                   item.get("available", 0) or
                                   max(0, total - taken))
-                return (
-                    f"Leave Balance Summary\n\n"
-                    f"Category: Casual & Sick Leave\n"
-                    f"Taken: {taken} days\n"
-                    f"Remaining Balance: {remaining} days (out of {int(total)})"
-                )
+                return _render("Casual & Sick Leave", taken, total, remaining)
         # If no Casual/Sick found, show first item
         if items:
             item = items[0]
@@ -387,12 +392,7 @@ def _format_leave_tracker(counts: dict) -> str:
                               item.get("available", 0) or
                               max(0, total - taken))
             lt = item.get("leave_type", "Leave")
-            return (
-                f"Leave Balance Summary\n\n"
-                f"Category: {lt}\n"
-                f"Taken: {taken} days\n"
-                f"Remaining Balance: {remaining} days (out of {int(total)})"
-            )
+            return _render(lt, taken, total, remaining)
         return "No leave records found for your account."
 
     # Handle dict-style response with "leave_balances" wrapper
@@ -427,10 +427,5 @@ def _format_leave_tracker(counts: dict) -> str:
         remaining = max(0.0, total - taken)
     remaining = float(remaining)
 
-    return (
-        f"Leave Balance Summary\n\n"
-        f"Category: Casual & Sick Leave\n"
-        f"Taken: {taken} days\n"
-        f"Remaining Balance: {remaining} days (out of {int(total)})"
-    )
+    return _render("Casual & Sick Leave", taken, total, remaining)
 
