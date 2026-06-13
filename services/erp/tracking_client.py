@@ -171,7 +171,7 @@ def format_tracking_response(normalized: dict) -> str:
     if normalized.get("type") == "leave_tracker":
         return _format_leave_tracker(normalized.get("counts", {}))
         
-    # Standard Request Details Formatting
+    # Standard Request Details — double newlines so ReactMarkdown renders each field on its own line
     lines = []
     lines.append(f"Request Tracking Details")
     lines.append(f"ID: {normalized['id']}")
@@ -191,12 +191,11 @@ def format_tracking_response(normalized: dict) -> str:
 
     customs = {k: v for k, v in normalized["custom_details"].items() if v not in (None, "")}
     if customs:
-        lines.append("")
         lines.append("Additional Specifications:")
         for k, v in customs.items():
-            lines.append(f"- **{k}:** {v}")
+            lines.append(f"- {k}: {v}")
 
-    return "\n".join(lines)
+    return "\n\n".join(lines)
 
 def _format_food_log(data: dict, date_range: str) -> str:
     records = data.get("records", [])
@@ -208,12 +207,12 @@ def _format_food_log(data: dict, date_range: str) -> str:
     md = []
     md.append(f"Food Booking Log Summary ({date_range})")
     md.append(f"Total Booked: {counts.get('Booked', 0)} | Consumed: {counts.get('Consumed', 0)} | Not Consumed: {counts.get('Not Consumed', 0)}")
-    md.append("\nBookings:")
+    md.append("Bookings:")
     for r in records:
         if r.get("Request Date"):
             md.append(f"- {r['Request Date']} | {r.get('Type')} | {r.get('Status')} | {r.get('Location', 'N/A')}")
-            
-    return "\n".join(md)
+
+    return "\n\n".join(md)
 
 def _normalize_packaging_response(raw_response: dict) -> dict[str, Any]:
     raw = raw_response.get("message") or raw_response
@@ -367,7 +366,7 @@ def _format_leave_tracker(counts: dict) -> str:
             f"Total Allocated: {int(total)} days",
             f"Remaining Balance: {remaining} days",
         ]
-        return "\n".join(lines)
+        return "\n\n".join(lines)
 
     # Handle list-style response (Frappe returns a list of leave allocation dicts)
     if isinstance(counts, dict) and "_list" in counts:
