@@ -469,6 +469,7 @@ async def _run_agent(query: str, session_id: str | None = None):
                 return guide
 
     # ── Check for pending ERP session ──────────────────────────────
+    session_active = False
     if session_id and session_id in PENDING_ERP_SESSIONS:
         pending_plan = PENDING_ERP_SESSIONS[session_id]
         pending_route = pending_plan.get("route_name")
@@ -541,7 +542,10 @@ async def _run_agent(query: str, session_id: str | None = None):
                 # If tracking request, any RAG/TOOLS query is an intent switch.
                 # Otherwise, check if query looks like a distinct question/command.
                 if pending_route == "track_request":
-                    should_discard = True
+                    import re as _re
+                    is_req_id = _re.match(r"^\s*(?:PC|MM|MT|DL|LF|ERP_I|ERP-SF|FBSG|SUG|ERP-RU|ERP-FAQ|ERP-M|ERP_SF)-\w+(?:-\w+)*\s*$", query, _re.I)
+                    if not is_req_id:
+                        should_discard = True
                 elif any(query.lower().startswith(prefix) for prefix in ["what ", "when ", "how ", "where ", "who ", "did i ", "show me ", "list ", "tell me "]):
                     should_discard = True
 
@@ -549,36 +553,62 @@ async def _run_agent(query: str, session_id: str | None = None):
                 logger.info(f"User switched intent from {pending_route} to {new_route}. Discarding pending session.")
                 del PENDING_ERP_SESSIONS[session_id]
 
-        # 4. If the session is still active, process the parameters
         if session_id and session_id in PENDING_ERP_SESSIONS:
-            # Fallback: if Qwen could not extract anything and there is only 1 missing field,
-            # assume the entire query string is the value for that single missing field.
-            if not new_params and len(missing_fields) == 1:
-                new_params = {missing_fields[0]: query.strip()}
+            session_active = True
 
-            if not new_params:
-                result = await _get_friendly_missing_fields_message(missing_fields, pending_plan.get("route_name"))
-                sys.stdout.write(f"{MARKER_FINAL_START}\n")
-                await stream_text_word_by_word(result)
-                sys.stdout.write(f"{MARKER_FINAL_END}\n")
-                sys.stdout.flush()
-                return result
+    if session_active:
+        # 4. If the session is still active, process the parameters
+        # Fallback: if Qwen could not extract anything and there is only 1 missing field,
+        # assume the entire query string is the value for that single missing field.
+        if not new_params and len(missing_fields) == 1:
+            field = missing_fields[0]
+            route_config = get_erp_route_config(pending_route)
+            ptype = route_config.get("parameters", {}).get(field) if route_config else None
+            val_str = query.strip()
+            if field == "ratings":
+                import re as _re
+                num_match = _re.search(r"\b([1-5](?:\.\d+)?)\b", val_str)
+                if num_match:
+                    new_params = {field: float(num_match.group(1))}
+            elif ptype == "number":
+                try:
+                    new_params = {field: float(val_str)}
+                except ValueError:
+                    pass
+            elif ptype == "boolean":
+                if val_str.lower() in ("yes", "true", "1", "y"):
+                    new_params = {field: True}
+                elif val_str.lower() in ("no", "false", "0", "n"):
+                    new_params = {field: False}
+            else:
+                new_params = {field: val_str}
 
-            # Normalise app_name aliases in the reply
-            if "app_name" in new_params:
-                from common.routing.planning.parameter_extractor import APP_NAME_MAPPING
-                cand = new_params["app_name"].strip().lower()
-                for canonical, aliases in APP_NAME_MAPPING.items():
-                    if cand == canonical.lower() or any(cand == a.lower() for a in aliases):
-                        new_params["app_name"] = canonical
-                        break
+        if not new_params:
+            result = await _get_friendly_missing_fields_message(missing_fields, pending_plan.get("route_name"))
+            sys.stdout.write(f"{MARKER_FINAL_START}\n")
+            await stream_text_word_by_word(result)
+            sys.stdout.write(f"{MARKER_FINAL_END}\n")
+            sys.stdout.flush()
+            return result
 
-            if pending_plan.get("parameters") is None:
-                pending_plan["parameters"] = {}
-            pending_plan["parameters"].update(new_params)
+        # Normalise app_name aliases in the reply
+        if "app_name" in new_params:
+            from common.routing.planning.parameter_extractor import APP_NAME_MAPPING
+            cand = new_params["app_name"].strip().lower()
+            for canonical, aliases in APP_NAME_MAPPING.items():
+                if cand == canonical.lower() or any(cand == a.lower() for a in aliases):
+                    new_params["app_name"] = canonical
+                    break
 
-            route = f"ERP_ROUTE:{pending_plan['route_name']}"
-            plan = pending_plan
+        if pending_plan.get("parameters") is None:
+            pending_plan["parameters"] = {}
+        pending_plan["parameters"].update(new_params)
+        
+        # Save the updated pending plan back to persistent storage
+        PENDING_ERP_SESSIONS[session_id] = pending_plan
+
+        route = f"ERP_ROUTE:{pending_plan['route_name']}"
+        plan = pending_plan
     else:
         route = await route_query(query)
         plan = None

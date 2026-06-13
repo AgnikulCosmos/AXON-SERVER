@@ -499,7 +499,9 @@
       "create an ERP ticket for app uhjkm module Dashboard priority P0",
       "I need to create a support ticket",
       "raise a ticket",
-      "create a support ticket"
+      "create a support ticket",
+      "submit a support ticket for Fleet Management app with description: Test description",
+      "submit a support ticket for Fleet Management app"
     ],
     "doctype": "ERP_Tickets",
     "frappe_method": "erp_support.put_api.create",

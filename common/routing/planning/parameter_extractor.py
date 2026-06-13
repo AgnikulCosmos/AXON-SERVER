@@ -208,6 +208,29 @@ def extract_parameters(query: str, route_config: dict) -> dict:
             logger.info(f"Discarding generic description: {desc_val}")
             del extracted_params["description"]
 
+    if "feedback" in extracted_params:
+        feed_val = str(extracted_params["feedback"]).strip().lower().strip("!?.,'")
+        generic_feedback_triggers = {
+            "submit feedback", "give feedback", "write feedback", "rate an application",
+            "create erp support feedback", "submit a review", "submit a feedback", "give a feedback",
+            "feedback", "suggestion", "create suggestion", "submit suggestion", "give suggestion",
+            "canteen feedback", "canteen suggestion", "food feedback", "food suggestion",
+            "feedback suggestions", "suggestions", "feedbacks"
+        }
+        is_generic = feed_val in generic_feedback_triggers
+        
+        # Discard if it is just specifying the app name, e.g. "for fleet management" or "fleet management"
+        app_name_val = extracted_params.get("app_name")
+        if app_name_val:
+            app_name_lower = str(app_name_val).lower()
+            if feed_val == f"for {app_name_lower}" or feed_val == app_name_lower:
+                is_generic = True
+                
+        if is_generic:
+            logger.info(f"Discarding generic feedback: {feed_val}")
+            del extracted_params["feedback"]
+
+
     route_name = route_config.get("route_name", "")
     if route_name == "lost_found_create":
         if "name" in extracted_params:
@@ -298,6 +321,10 @@ def _keyword_extract(query: str, schema: dict) -> dict:
             lf_name = re.search(r"\b(LF-\d{2}-\d{4}-\d{4,6})\b", query, re.I)
             if lf_name:
                 extracted[param] = lf_name.group(1).upper()
+        elif param in ("req_id", "docname"):
+            req_id_match = re.search(r"\b((?:PC|MM|MT|DL|LF|ERP_I|ERP-SF|FBSG|SUG|ERP-RU|ERP-FAQ|ERP-M|ERP_SF)-\w+(?:-\w+)*)\b", query, re.I)
+            if req_id_match:
+                extracted[param] = req_id_match.group(1).upper()
 
     return extracted
 
@@ -351,9 +378,16 @@ def _erp_support_extract(query: str, route_config: dict, schema: dict) -> dict:
                             break
 
     if "ratings" in schema:
-        rating = re.search(r"\bratings?\s*[:=]?\s*([1-5](?:\.\d+)?)\b", query, re.I)
-        if rating:
-            extracted["ratings"] = float(rating.group(1))
+        for pattern in [
+            r"\bratings?\s*[:=]?\s*([1-5](?:\.\d+)?)\b",
+            r"\brate\s+(?:it\s+)?([1-5](?:\.\d+)?)\b",
+            r"\b([1-5](?:\.\d+)?)\s*stars?\b",
+            r"\bgive\s+(?:it\s+)?([1-5](?:\.\d+)?)\b",
+        ]:
+            match = re.search(pattern, query, re.I)
+            if match:
+                extracted["ratings"] = float(match.group(1))
+                break
 
     # ── 1. First, try to extract app_name using explicit string patterns ──
     explicit_app_name = None
