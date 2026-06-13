@@ -543,7 +543,7 @@ async def _run_agent(query: str, session_id: str | None = None):
                 # Otherwise, check if query looks like a distinct question/command.
                 if pending_route == "track_request":
                     import re as _re
-                    is_req_id = _re.match(r"^\s*(?:PC|MM|MT|DL|LF|ERP_I|ERP-SF|FBSG|SUG|ERP-RU|ERP-FAQ|ERP-M|ERP_SF)-\w+(?:-\w+)*\s*$", query, _re.I)
+                    is_req_id = _re.match(r"^\s*(?:PC|MM|MT|DL|LF|ERP_I|ERP-SF|FBSG|SUG|ERP-RU|ERP-FAQ|ERP-M|ERP_SF)[-_]\w+(?:[-_]\w+)*\s*$", query, _re.I)
                     if not is_req_id:
                         should_discard = True
                 elif any(query.lower().startswith(prefix) for prefix in ["what ", "when ", "how ", "where ", "who ", "did i ", "show me ", "list ", "tell me "]):

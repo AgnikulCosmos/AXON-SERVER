@@ -172,28 +172,31 @@ def format_tracking_response(normalized: dict) -> str:
         return _format_leave_tracker(normalized.get("counts", {}))
         
     # Standard Request Details Formatting
-    md = []
-    md.append(f"Request Tracking Details: {normalized['id']}")
-    md.append(f"Application: {normalized['app_name']}")
-    md.append(f"Request Type: {normalized['type']}")
-    md.append(f"Status: {normalized['status']}")
-    md.append(f"Raised By: {normalized['raised_by']}")
+    lines = []
+    lines.append(f"Request Tracking Details")
+    lines.append(f"ID: {normalized['id']}")
+    lines.append(f"Application: {normalized['app_name']}")
+    lines.append(f"Request Type: {normalized['type']}")
+    lines.append(f"Status: {normalized['status']}")
+    lines.append(f"Raised By: {normalized['raised_by']}")
     if normalized.get("created_at"):
-        md.append(f"Created At: {normalized['created_at']}")
+        lines.append(f"Created At: {normalized['created_at']}")
     if normalized.get("assigned_to"):
-        md.append(f"Assigned To: {normalized['assigned_to']}")
+        lines.append(f"Assigned To: {normalized['assigned_to']}")
     if normalized.get("priority"):
-        md.append(f"Priority: {normalized['priority']}")
-        
-    md.append(f"Summary / Description: {normalized['description'] or normalized['title'] or 'No description provided.'}")
-    
+        lines.append(f"Priority: {normalized['priority']}")
+
+    desc = normalized.get("description") or normalized.get("title") or "No description provided."
+    lines.append(f"Summary / Description: {desc}")
+
     customs = {k: v for k, v in normalized["custom_details"].items() if v not in (None, "")}
     if customs:
-        md.append("\nAdditional Specifications:")
+        lines.append("")
+        lines.append("Additional Specifications:")
         for k, v in customs.items():
-            md.append(f"{k}: {v}")
-            
-    return "\n".join(md)
+            lines.append(f"- **{k}:** {v}")
+
+    return "\n".join(lines)
 
 def _format_food_log(data: dict, date_range: str) -> str:
     records = data.get("records", [])

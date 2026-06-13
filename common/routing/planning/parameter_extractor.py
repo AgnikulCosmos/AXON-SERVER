@@ -322,7 +322,11 @@ def _keyword_extract(query: str, schema: dict) -> dict:
             if lf_name:
                 extracted[param] = lf_name.group(1).upper()
         elif param in ("req_id", "docname"):
-            req_id_match = re.search(r"\b((?:PC|MM|MT|DL|LF|ERP_I|ERP-SF|FBSG|SUG|ERP-RU|ERP-FAQ|ERP-M|ERP_SF)-\w+(?:-\w+)*)\b", query, re.I)
+            # Support both hyphen and underscore separators, e.g. ERP_I_75 or ERP-SF-0001
+            req_id_match = re.search(
+                r"\b((?:PC|MM|MT|DL|LF|ERP_I|ERP-SF|FBSG|SUG|ERP-RU|ERP-FAQ|ERP-M|ERP_SF)[-_]\w+(?:[-_]\w+)*)\b",
+                query, re.I
+            )
             if req_id_match:
                 extracted[param] = req_id_match.group(1).upper()
 
