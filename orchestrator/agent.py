@@ -62,7 +62,7 @@ async def stream_text_word_by_word(text: str, *, end: str = "\n") -> None:
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 
 llm = ChatOllama(
-    model=os.getenv("LLM_MODEL", "qwen2.5:1.5b"),
+    model=os.getenv("LLM_MODEL", "qwen2.5:0.5b"),
     base_url=OLLAMA_BASE_URL,
     temperature=0.3,
     top_p=0.9,

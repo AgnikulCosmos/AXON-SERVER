@@ -18,7 +18,7 @@ logger = logging.getLogger("orchestrator")
 from common.llm.ollama_helper import get_working_ollama_base_url
 
 _summarizer_llm = ChatOllama(
-    model=os.getenv("LLM_MODEL", "qwen2.5:1.5b"),
+    model=os.getenv("LLM_MODEL", "qwen2.5:0.5b"),
     temperature=0,
     base_url=get_working_ollama_base_url()
 )

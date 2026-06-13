@@ -12,7 +12,7 @@ CHROMA_PATH = BASE_DIR / "chroma_langchain_db"
 def add_new_vectors(entries: list):
     import os
     import chromadb
-    embeddings = OllamaEmbeddings(model=os.getenv("EMBEDDING_MODEL", "mxbai-embed-large"))
+    embeddings = OllamaEmbeddings(model=os.getenv("EMBEDDING_MODEL", "nomic-embed-text"))
 
     host = os.getenv("CHROMA_SERVER_HOST")
     port = os.getenv("CHROMA_SERVER_PORT", "8000")

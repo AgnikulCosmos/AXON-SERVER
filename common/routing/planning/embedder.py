@@ -12,7 +12,7 @@ import requests
 import numpy as np
 
 OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-EMBED_MODEL = os.getenv("EMBEDDING_MODEL", "mxbai-embed-large")
+EMBED_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
 
 
 def get_embedding(text: str) -> np.ndarray:

@@ -37,12 +37,11 @@ class TaskLocalStdout:
 def install_stdout_proxy():
     sys.stdout = TaskLocalStdout()
 
-
 def clean_line(line: str) -> str:
     line = re.sub(r'^\s*event:\s*', '', line)
     # Strip any stray marker tokens that may appear inline in content
     line = re.sub(r'<<<[A-Z_]+>>>', '', line)
-    return line.replace("\x00", "").replace("\r", "").replace("\n", "").strip()
+    return line.replace("\x00", "").replace("\r", "").replace("\n", "")
 
 
 def sse_event(data: str, event_type: Optional[str] = None) -> str:

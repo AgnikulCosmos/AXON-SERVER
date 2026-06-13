@@ -1,7 +1,7 @@
 import os
 
-LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:1.5b")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "mxbai-embed-large")
+LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:0.5b")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
 
 AGNIKUL_PEOPLE = {
     "srinath", "moin", "satyanarayanan", "janardhana",

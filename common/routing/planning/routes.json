@@ -1037,9 +1037,19 @@
     "parameters": {
       "from_date": "date",
       "to_date": "date",
-      "request_type": ["Self", "Manual FC", "Organisation", "Team"],
+      "request_type": [
+        "Self",
+        "Manual FC",
+        "Organisation",
+        "Team"
+      ],
       "location": "string",
-      "meal_type": ["Breakfast", "Lunch", "Dinner", "All"]
+      "meal_type": [
+        "Breakfast",
+        "Lunch",
+        "Dinner",
+        "All"
+      ]
     },
     "field_mapping": {
       "from_date": "from_date",
@@ -1051,7 +1061,7 @@
   },
   {
     "route_name": "RAG",
-    "description": "Retrieve internal knowledge about Agnikul Cosmos — company policies, HR rules, leave policies, company history, founders, vehicles like Agnibaan and Agnilet, milestones, launches, SDSC, SHAR, ISRO, canteen menu, reimbursements, payroll, attendance, shifts, holidays, fleets, and all internal enterprise information that is not publicly available.",
+    "description": "Retrieve internal knowledge about Agnikul Cosmos \u2014 company policies, HR rules, leave policies, company history, founders, vehicles like Agnibaan and Agnilet, milestones, launches, SDSC, SHAR, ISRO, canteen menu, reimbursements, payroll, attendance, shifts, holidays, fleets, and all internal enterprise information that is not publicly available.",
     "examples": [
       "what is the leave policy at Agnikul",
       "how many casual leaves do employees get",
@@ -1062,7 +1072,33 @@
       "how does reimbursement work",
       "what is the company holiday calendar",
       "tell me about Dhanush launchpad",
-      "what time does the cafeteria serve breakfast"
+      "what time does the cafeteria serve breakfast",
+      "what does Agnikul Cosmos do",
+      "what is Agnikul Cosmos",
+      "tell me about Agnikul Cosmos",
+      "what is the main business of Agnikul",
+      "what kind of company is Agnikul",
+      "what does Agnikul make",
+      "describe Agnikul Cosmos",
+      "give me an overview of Agnikul",
+      "what type of launch vehicles does Agnikul make",
+      "who are the founders of Agnikul",
+      "who started Agnikul Cosmos",
+      "who is the CEO of Agnikul",
+      "what is Agnilet",
+      "what is Agnibaan SOrTeD",
+      "how does Agnikuls rocket work",
+      "what milestones has Agnikul achieved",
+      "when was Agnikul founded",
+      "where is Agnikul headquartered",
+      "which industry is Agnikul in",
+      "is Agnikul an aerospace company",
+      "what is the attendance policy",
+      "how does payroll work at Agnikul",
+      "what are the working hours",
+      "what is the reimbursement policy",
+      "what is the travel policy",
+      "explain the appraisal process"
     ],
     "doctype": "",
     "frappe_method": "",
@@ -1114,7 +1150,7 @@
   },
   {
     "route_name": "IDENTITY",
-    "description": "Questions about the AI assistant itself — who are you, what is your name, what can you help with, what are your capabilities, what can Axon do, who built you, what is your purpose.",
+    "description": "Questions about the AI assistant itself \u2014 who are you, what is your name, what can you help with, what are your capabilities, what can Axon do, who built you, what is your purpose.",
     "examples": [
       "who are you",
       "what is your name",
@@ -1135,7 +1171,7 @@
   },
   {
     "route_name": "HOW_TO",
-    "description": "Questions about how to perform specific actions in Agnikul's ERP system — how to raise a ticket, how to submit feedback, how to track a request, how to check leave balance, how to report a lost item, procedural guides.",
+    "description": "Questions about how to perform specific actions in Agnikul's ERP system \u2014 how to raise a ticket, how to submit feedback, how to track a request, how to check leave balance, how to report a lost item, procedural guides.",
     "examples": [
       "how do I raise a ticket",
       "how to submit feedback",

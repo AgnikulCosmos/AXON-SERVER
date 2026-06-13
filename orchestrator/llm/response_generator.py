@@ -16,14 +16,13 @@ import os
 import json
 import logging
 from langchain_ollama import ChatOllama
+from common.llm.ollama_helper import get_working_ollama_base_url
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-
 _response_llm = ChatOllama(
-    model=os.getenv("LLM_MODEL", "qwen2.5:1.5b"),
-    base_url=OLLAMA_URL,
+    model=os.getenv("LLM_MODEL", "qwen2.5:0.5b"),
+    base_url=get_working_ollama_base_url(),
     temperature=0,
     streaming=False,
 )

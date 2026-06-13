@@ -16,7 +16,7 @@ COLLECTION_NAME = "agnikul_data"
 from common.llm.ollama_helper import get_working_ollama_base_url
 
 embeddings = OllamaEmbeddings(
-    model=os.getenv("EMBEDDING_MODEL", "mxbai-embed-large"),
+    model=os.getenv("EMBEDDING_MODEL", "nomic-embed-text"),
     base_url=get_working_ollama_base_url()
 )
 
