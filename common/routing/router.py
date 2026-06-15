@@ -155,7 +155,7 @@ def _normalize_query(query: str) -> str:
         # Strip punctuation for matching, preserve it for output
         stripped = word.strip("!?.,;:'\"").lower()
         if len(stripped) >= 4 and stripped not in _ERP_VOCAB:
-            matches = difflib.get_close_matches(stripped, _ERP_VOCAB, n=1, cutoff=0.70)
+            matches = difflib.get_close_matches(stripped, _ERP_VOCAB, n=1, cutoff=0.80)
             if matches:
                 # Replace the stripped part, preserving original case pattern and surrounding punctuation
                 prefix = word[: len(word) - len(word.lstrip("!?.,;:'\""))]
