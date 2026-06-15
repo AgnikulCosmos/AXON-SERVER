@@ -141,5 +141,13 @@ async def summarize_tool_output(
             sys.stdout.write(sources_str.replace("\n", "<br/>"))
             sys.stdout.flush()
             response_str += sources_str
+    elif tool_name == "wiki" and isinstance(tool_data, dict):
+        url = tool_data.get("url")
+        title = tool_data.get("title") or "Wikipedia"
+        if url:
+            sources_str = f"\n\n**Sources:** [{title}]({url})"
+            sys.stdout.write(sources_str.replace("\n", "<br/>"))
+            sys.stdout.flush()
+            response_str += sources_str
 
     return response_str
