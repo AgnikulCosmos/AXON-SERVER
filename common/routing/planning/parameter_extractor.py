@@ -120,8 +120,8 @@ def extract_parameters(query: str, route_config: dict) -> dict:
     if route_config.get("route_name") == "lost_found_create":
         q_lower = query.lower()
         if "found" in q_lower:
-            # Found report update flow
-            allowed = ["name", "status", "found_location", "found_date", "found_description"]
+            # Found report update flow / New found report creation flow
+            allowed = ["name", "item_name", "status", "found_location", "found_date", "found_description"]
             params_schema = {k: v for k, v in params_schema.items() if k in allowed}
         else:
             # Lost report creation flow
@@ -605,6 +605,13 @@ def _lost_found_extract(query: str, schema: dict) -> dict:
     if not (is_lost_schema or is_found_schema):
         return {}
 
+    # Extract status based on keywords
+    if "status" in schema:
+        if "found" in q_lower:
+            extracted["status"] = "Found"
+        elif "lost" in q_lower:
+            extracted["status"] = "Pending"
+
     # Extract location (lost or found)
     # Search for patterns like: "lost it at <location>", "lost at <location>", "lost in <location>", "at <location>", "in <location>", "found it at <location>"
     location_match = re.search(r"\b(?:lost|found)(?:\s+it|\s+them|\s+my\s+[a-zA-Z0-9_ -]+)?\s+(?:at|in|near|inside|around)\s+(?:the\s+)?([A-Za-z0-9_& -]+?)(?:\.|$|\s+today|\s+yesterday|\s+tomorrow)", q_lower)
@@ -630,6 +637,12 @@ def _lost_found_extract(query: str, schema: dict) -> dict:
     item_match = re.search(r"\b(?:lost|found)\s+(?:my|a|an|the|some)\s+([A-Za-z0-9_ -]+?)(?:\s+(?:in|at|near|inside|around|today|yesterday|tomorrow|with|of)|\.|$)", q_lower)
     if item_match:
         extracted["item_name"] = item_match.group(1).strip().title()
+
+    # Fallback pattern for item name: e.g. "found wallet", "found keys", "lost keys"
+    if "item_name" not in extracted:
+        fallback_item_match = re.search(r"\b(?:lost|found)\s+([A-Za-z0-9_-]+)(?:\s+(?:in|at|near|inside|around|today|yesterday|tomorrow|with|of)|\.|$)", q_lower)
+        if fallback_item_match:
+            extracted["item_name"] = fallback_item_match.group(1).strip().title()
 
     # If the user provides a detailed description like "The purse is black colour with logo"
     # Let's match descriptions like "<item> is/was <desc>"
