@@ -239,6 +239,14 @@ def extract_parameters(query: str, route_config: dict) -> dict:
                 logger.info(f"Discarding invalid reference name: {val!r}")
                 del extracted_params["name"]
 
+    # Clean up locations if they are just relative/temporal date keywords
+    for loc_field in ["lost_location", "found_location"]:
+        if loc_field in extracted_params:
+            val = str(extracted_params[loc_field]).strip().lower()
+            if val in ("today", "yesterday", "tomorrow", "this week", "last week", "this month", "last month"):
+                logger.info(f"Discarding temporal keyword as location: {extracted_params[loc_field]}")
+                del extracted_params[loc_field]
+
     logger.debug("Merged extraction result: %s", extracted_params)
     return extracted_params
 
@@ -518,6 +526,66 @@ def _erp_support_extract(query: str, route_config: dict, schema: dict) -> dict:
                         extracted["feedback"] = feedback_part
                     if helps_part:
                         extracted["helps"] = helps_part
+
+    # Heuristic fallback for erp_feedback_create and erp_tickets_create when feedback/description is not yet extracted
+    if "feedback" in schema and "feedback" not in extracted:
+        # If it is feedback creation
+        q_clean = query
+        # Remove ratings patterns
+        for pattern in [
+            r"\bratings?\s*[:=]?\s*[1-5](?:\.\d+)?\b",
+            r"\brate\s+(?:it\s+)?\s*[1-5](?:\.\d+)?\b",
+            r"\b[1-5](?:\.\d+)?\s*stars?\b",
+            r"\bgive\s+(?:it\s+)?\s*[1-5](?:\.\d+)?\b",
+        ]:
+            q_clean = re.sub(pattern, "", q_clean, flags=re.I)
+        
+        # Remove app name aliases if present
+        for canonical, aliases in APP_NAME_MAPPING.items():
+            for alias in aliases:
+                q_clean = re.sub(rf"\bfor\s+(?:the\s+)?{re.escape(alias)}\b", "", q_clean, flags=re.I)
+                q_clean = re.sub(rf"\bin\s+(?:the\s+)?{re.escape(alias)}\b", "", q_clean, flags=re.I)
+                q_clean = re.sub(rf"\b{re.escape(alias)}\b", "", q_clean, flags=re.I)
+
+        # Remove generic feedback verbs/triggers
+        q_clean = re.sub(r"\b(submit|give|leave|write|create|send)\s+(?:a\s+)?(?:feedback|review|suggestion|rating)\b", "", q_clean, flags=re.I)
+        q_clean = re.sub(r"\b(feedback|suggestions?|ratings?)\b", "", q_clean, flags=re.I)
+        
+        q_clean = q_clean.strip("!?.,;:'\" ")
+        q_clean = re.sub(r"\s+", " ", q_clean).strip()
+        # Clean leading/trailing conjunctions
+        q_clean = re.sub(r"^(?:and|or|with|for|about|to)\s+", "", q_clean, flags=re.I)
+        q_clean = re.sub(r"\s+(?:and|or|with|for|about|to)$", "", q_clean, flags=re.I)
+        
+        if q_clean and len(q_clean) > 3:
+            extracted["feedback"] = q_clean
+
+    if "description" in schema and "description" not in extracted:
+        # If it is ticket creation
+        q_clean = query
+        # Remove priority patterns (P0-P3, High, Medium, Low)
+        for val in ["low", "medium", "high", "p0", "p1", "p2", "p3"]:
+            q_clean = re.sub(rf"\b{re.escape(val)}\b", "", q_clean, flags=re.I)
+        # Remove app name aliases
+        for canonical, aliases in APP_NAME_MAPPING.items():
+            for alias in aliases:
+                q_clean = re.sub(rf"\bfor\s+(?:the\s+)?{re.escape(alias)}\b", "", q_clean, flags=re.I)
+                q_clean = re.sub(rf"\bin\s+(?:the\s+)?{re.escape(alias)}\b", "", q_clean, flags=re.I)
+                q_clean = re.sub(rf"\b{re.escape(alias)}\b", "", q_clean, flags=re.I)
+        # Remove module patterns
+        q_clean = re.sub(r"\bmodule\s*[:=]?\s*[A-Za-z0-9_& .-]+?\b", "", q_clean, flags=re.I)
+        # Remove generic ticket verbs/triggers
+        q_clean = re.sub(r"\b(raise|create|open|lodge|submit|report)\s+(?:a\s+)?(?:ticket|issue|bug|request|problem)\b", "", q_clean, flags=re.I)
+        q_clean = re.sub(r"\b(ticket|issue|bug|request|problem)\b", "", q_clean, flags=re.I)
+        
+        q_clean = q_clean.strip("!?.,;:'\" ")
+        q_clean = re.sub(r"\s+", " ", q_clean).strip()
+        # Clean leading/trailing conjunctions
+        q_clean = re.sub(r"^(?:and|or|with|for|about|to)\s+", "", q_clean, flags=re.I)
+        q_clean = re.sub(r"\s+(?:and|or|with|for|about|to)$", "", q_clean, flags=re.I)
+        
+        if q_clean and len(q_clean) > 3:
+            extracted["description"] = q_clean
 
     return extracted
 
