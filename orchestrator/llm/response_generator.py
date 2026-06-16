@@ -21,7 +21,7 @@ from common.llm.ollama_helper import get_working_ollama_base_url
 logger = logging.getLogger(__name__)
 
 _response_llm = ChatOllama(
-    model=os.getenv("LLM_MODEL", "qwen2.5:0.5b"),
+    model=os.getenv("LLM_MODEL", "qwen3.5:0.8b"),
     base_url=get_working_ollama_base_url(),
     temperature=0,
     streaming=False,

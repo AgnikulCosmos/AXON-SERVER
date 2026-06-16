@@ -1,6 +1,6 @@
 import os
 
-LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:0.5b")
+LLM_MODEL = os.getenv("LLM_MODEL", "qwen3.5:0.8b")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
 
 AGNIKUL_PEOPLE = {

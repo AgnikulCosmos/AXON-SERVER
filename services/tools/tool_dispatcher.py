@@ -156,7 +156,7 @@ Output exactly one word from the options: "wiki", "arxiv", or "ddgs". Do not inc
 Query: {query}
 Tool:"""
     try:
-        model = os.getenv("LLM_MODEL", "qwen2.5:0.5b")
+        model = os.getenv("LLM_MODEL", "qwen3.5:0.8b")
         async with ollama.AsyncClient(host=get_working_ollama_base_url()) as client:
             resp = await client.generate(
                 model=model,

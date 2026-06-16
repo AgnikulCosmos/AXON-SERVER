@@ -28,7 +28,7 @@ OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 # ── LLM for parameter extraction ────────────────────────────────────────────
 _extractor_llm = ChatOllama(
-    model=os.getenv("LLM_MODEL", "qwen2.5:0.5b"),
+    model=os.getenv("LLM_MODEL", "qwen3.5:0.8b"),
     base_url=OLLAMA_URL,
     temperature=0,
     streaming=False,

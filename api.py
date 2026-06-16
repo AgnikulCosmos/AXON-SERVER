@@ -36,7 +36,7 @@ from orchestrator.agent import (
 logger = logging.getLogger("api")
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-TITLE_MODEL = os.getenv("LLM_MODEL", "qwen2.5:0.5b")
+TITLE_MODEL = os.getenv("LLM_MODEL", "qwen3.5:0.8b")
 
 
 async def _wait_for_ollama(retries: int = 12, delay: float = 5.0) -> bool:
@@ -83,7 +83,7 @@ async def _ensure_ollama_models():
 
     models_to_pull = [
         os.getenv("EMBEDDING_MODEL", "nomic-embed-text"),
-        os.getenv("LLM_MODEL", "qwen2.5:0.5b"),
+        os.getenv("LLM_MODEL", "qwen3.5:0.8b"),
     ]
     for model in models_to_pull:
         if await _verify_model(model):

@@ -62,7 +62,7 @@ async def _confirm_route_with_llm(query: str, route_desc: str) -> bool:
     prompt = CONFIRM_ROUTE_PROMPT.format(route_desc=route_desc, query=query)
 
     try:
-        model = os.getenv("LLM_MODEL", "qwen2.5:0.5b")
+        model = os.getenv("LLM_MODEL", "qwen3.5:0.8b")
         async with ollama.AsyncClient(host=get_working_ollama_base_url()) as client:
             resp = await client.generate(
                 model=model,
@@ -110,7 +110,7 @@ async def _disambiguate_route_with_llm(query: str, route_name: str) -> str:
     prompt = DISAMBIGUATE_ROUTE_PROMPT.format(category=category.upper(), query=query.strip().capitalize())
 
     try:
-        model = os.getenv("LLM_MODEL", "qwen2.5:0.5b")
+        model = os.getenv("LLM_MODEL", "qwen3.5:0.8b")
         async with ollama.AsyncClient(host=get_working_ollama_base_url()) as client:
             resp = await client.generate(
                 model=model,
@@ -134,7 +134,7 @@ async def _disambiguate_route_with_llm(query: str, route_name: str) -> str:
 # Words the semantic router cares about. difflib will fuzzy-match user words
 # against this list and replace close-enough matches before embedding.
 _ERP_VOCAB = {
-    "leave", "balance", "show", "check", "track", "status", "request",
+    "leave", "balance", "track",
     "food", "canteen", "booking", "log", "meal", "dinner", "lunch", "breakfast",
     "ticket", "feedback", "suggestion", "create", "submit", "raise", "report",
     "lost", "found", "item", "management", "support", "erp",
