@@ -7,7 +7,7 @@ This repository houses the **AXON-Server** orchestrator backend. Below is the de
 ## Query Processing & Routing Flow
 
 ```mermaid
-flowchart LR
+flowchart TD
     %% Global styling
     classDef redBox fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#000000;
     classDef greenBox fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000000;
