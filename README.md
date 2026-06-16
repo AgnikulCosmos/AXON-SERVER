@@ -7,7 +7,7 @@ This repository houses the **AXON-Server** orchestrator backend. Below is the de
 ## Query Processing & Routing Flow
 
 ```mermaid
-flowchart TD
+flowchart LR
     %% Global styling
     classDef redBox fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#000000;
     classDef greenBox fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000000;
@@ -16,71 +16,70 @@ flowchart TD
     classDef greyBox fill:#f5f5f5,stroke:#9e9e9e,stroke-width:2px,color:#000000;
     classDef startNode fill:#eceff1,stroke:#607d8b,stroke-width:2px,color:#000000;
 
-    Start([1. INPUT QUERY<br>Query String]) --> UnrelatedCheck{Query contains<br>Verb from<br>ACTION_VERBS?}
+    Start([1. INPUT]) --> UnrelatedCheck{2. Action Verb?}
 
-    subgraph UnrelatedFilter["2. UNRELATED QUERY FILTER"]
-        UnrelatedCheck -- YES --> ContextCheck{Query contains<br>context keyword from<br>ALLOWED_ACTION_CONTEXTS?}
-        ContextCheck -- NO --> UnrelatedError["Unrelated Query Error:<br>'I'm sorry, I couldn't perform that action.'"]
+    subgraph UnrelatedFilter["2. UNRELATED FILTER"]
+        UnrelatedCheck -- YES --> ContextCheck{Allowed Context?}
+        ContextCheck -- NO --> UnrelatedError["Unrelated Error"]
     end
 
-    ContextCheck -- YES --> PrivacyCheck1{Unauthorized Names:<br>Query contains 'priya'<br>and not current user?}
+    ContextCheck -- YES --> PrivacyCheck1{3. 'priya'? / username?}
     UnrelatedCheck -- NO --> PrivacyCheck1
 
-    subgraph PrivacyFilter["3. EMPLOYEE PRIVACY FILTER"]
-        PrivacyCheck1 -- YES --> PrivacyError["Privacy Error:<br>'I cannot disclose information about other employees.'"]
-        PrivacyCheck1 -- NO --> PrivacyCheck2{"Check ID patterns:<br>emp ID digits do not match<br>logged-in user digits?<br>Regex: emp [-_]? d+"}
+    subgraph PrivacyFilter["3. PRIVACY FILTER"]
+        PrivacyCheck1 -- YES --> PrivacyError["Privacy Error"]
+        PrivacyCheck1 -- NO --> PrivacyCheck2{"Check emp ID"}
         PrivacyCheck2 -- YES --> PrivacyError
-        PrivacyCheck2 -- NO --> PrivacyCheck3{Email addresses:<br>email is not logged-in<br>employee's email?}
+        PrivacyCheck2 -- NO --> PrivacyCheck3{Check email}
         PrivacyCheck3 -- YES --> PrivacyError
     end
 
-    PrivacyCheck3 -- NO --> CapabilitiesCheck{Query matches<br>'capabilities' or<br>'/capabilities'?}
+    PrivacyCheck3 -- NO --> CapabilitiesCheck{4. Capabilities?}
 
-    subgraph CapCheck["4. SYSTEM CAPABILITIES CHECK"]
-        CapabilitiesCheck -- YES --> ReturnCapabilities["Return list of capabilities directly"]
+    subgraph CapCheck["4. CAPABILITIES"]
+        CapabilitiesCheck -- YES --> ReturnCapabilities["Return List"]
     end
 
-    CapabilitiesCheck -- NO --> SlashCheck{Query starts with<br>command prefix?}
+    CapabilitiesCheck -- NO --> SlashCheck{5. Slash Command?}
 
-    subgraph SlashCommands["5. FORCED SEARCH SLASH COMMANDS"]
-        SlashCheck -- YES --> DispatchSlash["Extract query & dispatch directly to:<br>• /arxiv<br>• /wiki<br>• /ddgs"] --> SummarizeSlash["Summarize tool response using LLM"] --> SanitizeSlash["sanitize_or_block_response"] --> EndOutput([Output Response])
+    subgraph SlashCommands["5. SLASH COMMANDS"]
+        SlashCheck -- YES --> DispatchSlash["/arxiv, /wiki, /ddgs"] --> SummarizeSlash["Summarize LLM"] --> SanitizeSlash["Sanitize & Block"] --> EndOutput([Output])
     end
 
-    SlashCheck -- NO --> ActiveSessionCheck{Active session in<br>PENDING_ERP_SESSIONS?}
+    SlashCheck -- NO --> ActiveSessionCheck{6. Active Session?}
 
-    subgraph ActiveSession["6. ACTIVE FORM-FILLING SESSION"]
-        ActiveSessionCheck -- YES --> CancelCheck{Input in Cancel list?<br>cancel, stop, abort,<br>nevermind, quit, exit}
-        CancelCheck -- YES --> CancelSession["Delete pending session.<br>Return: 'Okay, I've cancelled that request.'"]
-        CancelCheck -- NO --> ParseInput["Parse key-value inputs<br>(field: value patterns)"] --> MapFields["Map parameters & validate fields"] --> ResolvedCheck{All required parameters<br>are resolved?}
-        ResolvedCheck -- NO --> PromptFields["Prompt user for remaining missing fields"]
-        ResolvedCheck -- YES --> ExecuteActiveERP["execute_erp_support_plan"] --> FormatActiveERP["format_erp_support_response"] --> SanitizeSlash
+    subgraph ActiveSession["6. ACTIVE SESSION"]
+        ActiveSessionCheck -- YES --> CancelCheck{Cancel?}
+        CancelCheck -- YES --> CancelSession["Cancel request"]
+        CancelCheck -- NO --> ParseInput["Parse key-value"] --> MapFields["Map parameters"] --> ResolvedCheck{All resolved?}
+        ResolvedCheck -- NO --> PromptFields["Prompt missing"]
+        ResolvedCheck -- YES --> ExecuteActiveERP["execute_erp"] --> FormatActiveERP["format_erp"] --> SanitizeSlash
     end
 
-    ActiveSessionCheck -- NO --> Rewriter["contextualize_query_with_history<br>(rewrites if history & pronouns matched<br>and no KNOWN_ENTITIES present)"] --> HowToCheck{Query is a<br>'How-to' query?}
+    ActiveSessionCheck -- NO --> Rewriter["contextualize_query"] --> HowToCheck{7. How-To?}
 
-    subgraph HowToFlow["7. CONTEXTUALIZATION & HOW-TO CHECK"]
-        HowToCheck -- YES --> HowToRAG["Run RAG search (rag_search)"] --> HowToRAGCheck{RAG finds information?}
+    subgraph HowToFlow["7. HOW-TO CHECK"]
+        HowToCheck -- YES --> HowToRAG["rag_search"] --> HowToRAGCheck{Info found?}
         HowToRAGCheck -- YES --> SanitizeSlash
-        HowToRAGCheck -- NO --> HowToERP["Match against ERP routes (route_query)"] --> HowToERPCheck{Matches ERP route?}
-        HowToERPCheck -- YES --> GuideOutput["Stream guide from ERP_INSTRUCTIONAL_GUIDES<br>(lost_found_create/list, erp_tickets_create/list,<br>erp_feedback_create, erp_suggestion_create,<br>track_request, food_log_list)"]
+        HowToRAGCheck -- NO --> HowToERP["Match ERP"] --> HowToERPCheck{Matches ERP?}
+        HowToERPCheck -- YES --> GuideOutput["ERP guide"]
     end
 
-    HowToERPCheck -- NO --> NormalizeQuery["Run typo-normalization using _ERP_VOCAB"]
+    HowToERPCheck -- NO --> NormalizeQuery["_ERP_VOCAB"]
     HowToCheck -- NO --> NormalizeQuery
 
-    subgraph SemanticRouting["8. SEMANTIC ROUTING CLASSIFICATION (HYBRID MATCHING)"]
-        NormalizeQuery --> ExactMatchCheck{Exact match with<br>SIMPLE_GREETINGS or<br>MODEL_KEYWORDS?}
-        ExactMatchCheck -- YES --> ReturnDirect["Return greetings or identity answer directly"]
-        ExactMatchCheck -- NO --> CosineSim["Embed query using 'nomic-embed-text'<br>Compare with cached route embeddings<br>Calculate Confidence"] --> ConfidenceCheck{Confidence >= 0.45?}
+    subgraph SemanticRouting["8. SEMANTIC ROUTING"]
+        NormalizeQuery --> ExactMatchCheck{Exact greet / model?}
+        ExactMatchCheck -- YES --> ReturnDirect["Return direct"]
+        ExactMatchCheck -- NO --> CosineSim["nomic-embed-text"] --> ConfidenceCheck{Confidence >= 0.45?}
         
-        ConfidenceCheck -- YES --> ConfirmRoute["Confirm & Disambiguate route with LLM<br>Extract parameters (extract_parameters)<br>using fallback keyword matching"] --> ParamsCheck{All required parameters<br>for the route are found?}
+        ConfidenceCheck -- YES --> ConfirmRoute["Confirm route"] --> ParamsCheck{Params found?}
+        ParamsCheck -- NO --> CreatePending["Save state"] --> PromptFields
+        ParamsCheck -- YES --> ExecuteERP["execute_erp"] --> FormatERP["format_erp"] --> SanitizeSlash
         
-        ParamsCheck -- NO --> CreatePending["Save state to PENDING_ERP_SESSIONS"] --> PromptFields
-        ParamsCheck -- YES --> ExecuteERP["execute_erp_support_plan"] --> FormatERP["format_erp_support_response"] --> SanitizeSlash
-        
-        ConfidenceCheck -- NO --> PolicyRAG["Run RAG search (rag_search)<br>checking for company rules<br>(POLICY_KEYWORDS & POLICY_DOMAINS)"] --> PolicyRAGCheck{RAG finds info?}
-        PolicyRAGCheck -- YES --> ReturnRAG["Return sanitized RAG summary"] --> SanitizeSlash
-        PolicyRAGCheck -- NO --> InferSearchTool["Infer search tool using LLM:<br>'wiki', 'arxiv', or 'ddgs'"] --> DispatchSearch["Dispatch query to search tool"] --> SummarizeSearch["Summarize tool response using LLM"] --> SanitizeSlash
+        ConfidenceCheck -- NO --> PolicyRAG["rag_search policies"] --> PolicyRAGCheck{Info found?}
+        PolicyRAGCheck -- YES --> ReturnRAG["Return RAG summary"] --> SanitizeSlash
+        PolicyRAGCheck -- NO --> InferSearchTool["Infer tool"] --> DispatchSearch["Dispatch search"] --> SummarizeSearch["Summarize response"] --> SanitizeSlash
     end
 
     %% Apply Styles
