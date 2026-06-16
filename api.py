@@ -98,7 +98,7 @@ async def _ensure_ollama_models():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await _ensure_ollama_models()
+    asyncio.create_task(_ensure_ollama_models())
     yield
 
 
