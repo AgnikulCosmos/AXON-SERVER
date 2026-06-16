@@ -16,72 +16,78 @@ flowchart TD
     classDef greyBox fill:#f5f5f5,stroke:#9e9e9e,stroke-width:2px,color:#000000;
     classDef startNode fill:#eceff1,stroke:#607d8b,stroke-width:2px,color:#000000;
 
-    Start([1. INPUT QUERY<br>Query String]) :::startNode --> UnrelatedCheck{Query contains<br>Verb from<br>ACTION_VERBS?} :::yellowBox
+    Start([1. INPUT QUERY<br>Query String]) --> UnrelatedCheck{Query contains<br>Verb from<br>ACTION_VERBS?}
 
     subgraph UnrelatedFilter["2. UNRELATED QUERY FILTER"]
-        UnrelatedCheck -- YES --> ContextCheck{Query contains<br>context keyword from<br>ALLOWED_ACTION_CONTEXTS?} :::yellowBox
-        ContextCheck -- NO --> UnrelatedError["Unrelated Query Error:<br>'I'm sorry, I couldn't perform that action.'"] :::redBox
+        UnrelatedCheck -- YES --> ContextCheck{Query contains<br>context keyword from<br>ALLOWED_ACTION_CONTEXTS?}
+        ContextCheck -- NO --> UnrelatedError["Unrelated Query Error:<br>'I'm sorry, I couldn't perform that action.'"]
     end
 
-    ContextCheck -- YES --> PrivacyCheck1{Unauthorized Names:<br>Query contains 'priya'<br>and not current user?} :::yellowBox
+    ContextCheck -- YES --> PrivacyCheck1{Unauthorized Names:<br>Query contains 'priya'<br>and not current user?}
     UnrelatedCheck -- NO --> PrivacyCheck1
 
     subgraph PrivacyFilter["3. EMPLOYEE PRIVACY FILTER"]
-        PrivacyCheck1 -- YES --> PrivacyError["Privacy Error:<br>'I cannot disclose information about other employees.'"] :::redBox
-        PrivacyCheck1 -- NO --> PrivacyCheck2{"Check ID patterns:<br>emp ID digits do not match<br>logged-in user digits?<br>Regex: emp [-_]? d+"} :::yellowBox
+        PrivacyCheck1 -- YES --> PrivacyError["Privacy Error:<br>'I cannot disclose information about other employees.'"]
+        PrivacyCheck1 -- NO --> PrivacyCheck2{"Check ID patterns:<br>emp ID digits do not match<br>logged-in user digits?<br>Regex: emp [-_]? d+"}
         PrivacyCheck2 -- YES --> PrivacyError
-        PrivacyCheck2 -- NO --> PrivacyCheck3{Email addresses:<br>email is not logged-in<br>employee's email?} :::yellowBox
+        PrivacyCheck2 -- NO --> PrivacyCheck3{Email addresses:<br>email is not logged-in<br>employee's email?}
         PrivacyCheck3 -- YES --> PrivacyError
     end
 
-    PrivacyCheck3 -- NO --> CapabilitiesCheck{Query matches<br>'capabilities' or<br>'/capabilities'?} :::yellowBox
+    PrivacyCheck3 -- NO --> CapabilitiesCheck{Query matches<br>'capabilities' or<br>'/capabilities'?}
 
     subgraph CapCheck["4. SYSTEM CAPABILITIES CHECK"]
-        CapabilitiesCheck -- YES --> ReturnCapabilities["Return list of capabilities directly"] :::greenBox
+        CapabilitiesCheck -- YES --> ReturnCapabilities["Return list of capabilities directly"]
     end
 
-    CapabilitiesCheck -- NO --> SlashCheck{Query starts with<br>command prefix?} :::yellowBox
+    CapabilitiesCheck -- NO --> SlashCheck{Query starts with<br>command prefix?}
 
     subgraph SlashCommands["5. FORCED SEARCH SLASH COMMANDS"]
-        SlashCheck -- YES --> DispatchSlash["Extract query & dispatch directly to:<br>• /arxiv<br>• /wiki<br>• /ddgs"] :::greenBox --> SummarizeSlash["Summarize tool response using LLM"] :::greenBox --> SanitizeSlash["sanitize_or_block_response"] :::greenBox --> EndOutput([Output Response])
+        SlashCheck -- YES --> DispatchSlash["Extract query & dispatch directly to:<br>• /arxiv<br>• /wiki<br>• /ddgs"] --> SummarizeSlash["Summarize tool response using LLM"] --> SanitizeSlash["sanitize_or_block_response"] --> EndOutput([Output Response])
     end
 
-    SlashCheck -- NO --> ActiveSessionCheck{Active session in<br>PENDING_ERP_SESSIONS?} :::yellowBox
+    SlashCheck -- NO --> ActiveSessionCheck{Active session in<br>PENDING_ERP_SESSIONS?}
 
     subgraph ActiveSession["6. ACTIVE FORM-FILLING SESSION"]
-        ActiveSessionCheck -- YES --> CancelCheck{Input in Cancel list?<br>cancel, stop, abort,<br>nevermind, quit, exit} :::yellowBox
-        CancelCheck -- YES --> CancelSession["Delete pending session.<br>Return: 'Okay, I've cancelled that request.'"] :::greenBox
-        CancelCheck -- NO --> ParseInput["Parse key-value inputs<br>Regex: b(a-zA-Z_+)s*:s*(.*?)(?=s+b[a-zA-Z_]+s*:|$)"] :::greenBox --> MapFields["Map parameters & validate fields"] :::greenBox --> ResolvedCheck{All required parameters<br>are resolved?} :::yellowBox
-        ResolvedCheck -- NO --> PromptFields["Prompt user for remaining missing fields"] :::greenBox
-        ResolvedCheck -- YES --> ExecuteActiveERP["execute_erp_support_plan"] :::greenBox --> FormatActiveERP["format_erp_support_response"] :::greenBox --> SanitizeSlash
+        ActiveSessionCheck -- YES --> CancelCheck{Input in Cancel list?<br>cancel, stop, abort,<br>nevermind, quit, exit}
+        CancelCheck -- YES --> CancelSession["Delete pending session.<br>Return: 'Okay, I've cancelled that request.'"]
+        CancelCheck -- NO --> ParseInput["Parse key-value inputs<br>(field: value patterns)"] --> MapFields["Map parameters & validate fields"] --> ResolvedCheck{All required parameters<br>are resolved?}
+        ResolvedCheck -- NO --> PromptFields["Prompt user for remaining missing fields"]
+        ResolvedCheck -- YES --> ExecuteActiveERP["execute_erp_support_plan"] --> FormatActiveERP["format_erp_support_response"] --> SanitizeSlash
     end
 
-    ActiveSessionCheck -- NO --> Rewriter["contextualize_query_with_history<br>(rewrites if history & pronouns matched<br>and no KNOWN_ENTITIES present)"] :::greenBox --> HowToCheck{Query is a<br>'How-to' query?} :::yellowBox
+    ActiveSessionCheck -- NO --> Rewriter["contextualize_query_with_history<br>(rewrites if history & pronouns matched<br>and no KNOWN_ENTITIES present)"] --> HowToCheck{Query is a<br>'How-to' query?}
 
     subgraph HowToFlow["7. CONTEXTUALIZATION & HOW-TO CHECK"]
-        HowToCheck -- YES --> HowToRAG["Run RAG search (rag_search)"] :::greenBox --> HowToRAGCheck{RAG finds information?} :::yellowBox
+        HowToCheck -- YES --> HowToRAG["Run RAG search (rag_search)"] --> HowToRAGCheck{RAG finds information?}
         HowToRAGCheck -- YES --> SanitizeSlash
-        HowToRAGCheck -- NO --> HowToERP["Match against ERP routes (route_query)"] :::greenBox --> HowToERPCheck{Matches ERP route?} :::yellowBox
-        HowToERPCheck -- YES --> GuideOutput["Stream guide from ERP_INSTRUCTIONAL_GUIDES<br>(lost_found_create/list, erp_tickets_create/list,<br>erp_feedback_create, erp_suggestion_create,<br>track_request, food_log_list)"] :::greenBox
+        HowToRAGCheck -- NO --> HowToERP["Match against ERP routes (route_query)"] --> HowToERPCheck{Matches ERP route?}
+        HowToERPCheck -- YES --> GuideOutput["Stream guide from ERP_INSTRUCTIONAL_GUIDES<br>(lost_found_create/list, erp_tickets_create/list,<br>erp_feedback_create, erp_suggestion_create,<br>track_request, food_log_list)"]
     end
 
-    HowToERPCheck -- NO --> NormalizeQuery["Run typo-normalization using _ERP_VOCAB"] :::greenBox
+    HowToERPCheck -- NO --> NormalizeQuery["Run typo-normalization using _ERP_VOCAB"]
     HowToCheck -- NO --> NormalizeQuery
 
     subgraph SemanticRouting["8. SEMANTIC ROUTING CLASSIFICATION (HYBRID MATCHING)"]
-        NormalizeQuery --> ExactMatchCheck{Exact match with<br>SIMPLE_GREETINGS or<br>MODEL_KEYWORDS?} :::yellowBox
-        ExactMatchCheck -- YES --> ReturnDirect["Return greetings or identity answer directly"] :::greenBox
-        ExactMatchCheck -- NO --> CosineSim["Embed query using 'nomic-embed-text'<br>Compare with cached route embeddings<br>Calculate Confidence"] :::greenBox --> ConfidenceCheck{Confidence >= 0.45?} :::yellowBox
+        NormalizeQuery --> ExactMatchCheck{Exact match with<br>SIMPLE_GREETINGS or<br>MODEL_KEYWORDS?}
+        ExactMatchCheck -- YES --> ReturnDirect["Return greetings or identity answer directly"]
+        ExactMatchCheck -- NO --> CosineSim["Embed query using 'nomic-embed-text'<br>Compare with cached route embeddings<br>Calculate Confidence"] --> ConfidenceCheck{Confidence >= 0.45?}
         
-        ConfidenceCheck -- YES --> ConfirmRoute["Confirm & Disambiguate route with LLM<br>Extract parameters (extract_parameters)<br>using fallback keyword matching"] :::greenBox --> ParamsCheck{All required parameters<br>for the route are found?} :::yellowBox
+        ConfidenceCheck -- YES --> ConfirmRoute["Confirm & Disambiguate route with LLM<br>Extract parameters (extract_parameters)<br>using fallback keyword matching"] --> ParamsCheck{All required parameters<br>for the route are found?}
         
-        ParamsCheck -- NO --> CreatePending["Save state to PENDING_ERP_SESSIONS"] :::greenBox --> PromptFields
-        ParamsCheck -- YES --> ExecuteERP["execute_erp_support_plan"] :::greenBox --> FormatERP["format_erp_support_response"] :::greenBox --> SanitizeSlash
+        ParamsCheck -- NO --> CreatePending["Save state to PENDING_ERP_SESSIONS"] --> PromptFields
+        ParamsCheck -- YES --> ExecuteERP["execute_erp_support_plan"] --> FormatERP["format_erp_support_response"] --> SanitizeSlash
         
-        ConfidenceCheck -- NO --> PolicyRAG["Run RAG search (rag_search)<br>checking for company rules<br>(POLICY_KEYWORDS & POLICY_DOMAINS)"] :::greenBox --> PolicyRAGCheck{RAG finds info?} :::yellowBox
-        PolicyRAGCheck -- YES --> ReturnRAG["Return sanitized RAG summary"] :::greenBox --> SanitizeSlash
-        PolicyRAGCheck -- NO --> InferSearchTool["Infer search tool using LLM:<br>'wiki', 'arxiv', or 'ddgs'"] :::greenBox --> DispatchSearch["Dispatch query to search tool"] :::greenBox --> SummarizeSearch["Summarize tool response using LLM"] :::greenBox --> SanitizeSlash
+        ConfidenceCheck -- NO --> PolicyRAG["Run RAG search (rag_search)<br>checking for company rules<br>(POLICY_KEYWORDS & POLICY_DOMAINS)"] --> PolicyRAGCheck{RAG finds info?}
+        PolicyRAGCheck -- YES --> ReturnRAG["Return sanitized RAG summary"] --> SanitizeSlash
+        PolicyRAGCheck -- NO --> InferSearchTool["Infer search tool using LLM:<br>'wiki', 'arxiv', or 'ddgs'"] --> DispatchSearch["Dispatch query to search tool"] --> SummarizeSearch["Summarize tool response using LLM"] --> SanitizeSlash
     end
+
+    %% Apply Styles
+    class Start startNode;
+    class UnrelatedCheck,ContextCheck,PrivacyCheck1,PrivacyCheck2,PrivacyCheck3,CapabilitiesCheck,SlashCheck,ActiveSessionCheck,CancelCheck,ResolvedCheck,HowToCheck,HowToRAGCheck,HowToERPCheck,ExactMatchCheck,ConfidenceCheck,ParamsCheck,PolicyRAGCheck yellowBox;
+    class UnrelatedError,PrivacyError redBox;
+    class ReturnCapabilities,DispatchSlash,SummarizeSlash,SanitizeSlash,CancelSession,ParseInput,MapFields,PromptFields,ExecuteActiveERP,FormatActiveERP,Rewriter,HowToRAG,HowToERP,GuideOutput,NormalizeQuery,ReturnDirect,CosineSim,ConfirmRoute,CreatePending,ExecuteERP,FormatERP,PolicyRAG,ReturnRAG,InferSearchTool,DispatchSearch,SummarizeSearch greenBox;
 ```
 
 ---
