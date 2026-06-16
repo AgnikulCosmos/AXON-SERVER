@@ -7,7 +7,7 @@ This repository houses the **AXON-Server** orchestrator backend. Below is the de
 ## Query Processing & Routing Flow
 
 ```mermaid
-flowchart TD
+flowchart LR
     %% Global styling
     classDef redBox fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#000000;
     classDef greenBox fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000000;
@@ -43,7 +43,7 @@ flowchart TD
     CapabilitiesCheck -- NO --> SlashCheck{5. Slash Command?}
 
     subgraph SlashCommands["5. SLASH COMMANDS"]
-        SlashCheck -- YES --> DispatchSlash["/arxiv, /wiki, /ddgs"] --> SummarizeSlash["Summarize LLM"] --> SanitizeSlash["Sanitize & Block"] --> EndOutput([Output])
+        SlashCheck -- YES --> DispatchSlash["/arxiv, /wiki, /ddgs"] --> SummarizeSlash["Summarize LLM"]
     end
 
     SlashCheck -- NO --> ActiveSessionCheck{6. Active Session?}
@@ -52,15 +52,13 @@ flowchart TD
         ActiveSessionCheck -- YES --> CancelCheck{Cancel?}
         CancelCheck -- YES --> CancelSession["Cancel request"]
         CancelCheck -- NO --> ParseInput["Parse key-value"] --> MapFields["Map parameters"] --> ResolvedCheck{All resolved?}
-        ResolvedCheck -- NO --> PromptFields["Prompt missing"]
-        ResolvedCheck -- YES --> ExecuteActiveERP["execute_erp"] --> FormatActiveERP["format_erp"] --> SanitizeSlash
+        ResolvedCheck -- YES --> ExecuteActiveERP["execute_erp"] --> FormatActiveERP["format_erp"]
     end
 
     ActiveSessionCheck -- NO --> Rewriter["contextualize_query"] --> HowToCheck{7. How-To?}
 
     subgraph HowToFlow["7. HOW-TO CHECK"]
         HowToCheck -- YES --> HowToRAG["rag_search"] --> HowToRAGCheck{Info found?}
-        HowToRAGCheck -- YES --> SanitizeSlash
         HowToRAGCheck -- NO --> HowToERP["Match ERP"] --> HowToERPCheck{Matches ERP?}
         HowToERPCheck -- YES --> GuideOutput["ERP guide"]
     end
@@ -74,19 +72,32 @@ flowchart TD
         ExactMatchCheck -- NO --> CosineSim["nomic-embed-text"] --> ConfidenceCheck{Confidence >= 0.45?}
         
         ConfidenceCheck -- YES --> ConfirmRoute["Confirm route"] --> ParamsCheck{Params found?}
-        ParamsCheck -- NO --> CreatePending["Save state"] --> PromptFields
-        ParamsCheck -- YES --> ExecuteERP["execute_erp"] --> FormatERP["format_erp"] --> SanitizeSlash
+        ParamsCheck -- NO --> CreatePending["Save state"]
+        ParamsCheck -- YES --> ExecuteERP["execute_erp"] --> FormatERP["format_erp"]
         
         ConfidenceCheck -- NO --> PolicyRAG["rag_search policies"] --> PolicyRAGCheck{Info found?}
-        PolicyRAGCheck -- YES --> ReturnRAG["Return RAG summary"] --> SanitizeSlash
-        PolicyRAGCheck -- NO --> InferSearchTool["Infer tool"] --> DispatchSearch["Dispatch search"] --> SummarizeSearch["Summarize response"] --> SanitizeSlash
+        PolicyRAGCheck -- YES --> ReturnRAG["Return RAG summary"]
+        PolicyRAGCheck -- NO --> InferSearchTool["Infer tool"] --> DispatchSearch["Dispatch search"] --> SummarizeSearch["Summarize response"]
     end
+
+    %% Global Feed-Forward Connections to Output Layer
+    SummarizeSlash --> SanitizeResponse["Sanitize & Block"]
+    ExecuteActiveERP --> SanitizeResponse
+    HowToRAGCheck -- YES --> SanitizeResponse
+    ReturnRAG --> SanitizeResponse
+    SummarizeSearch --> SanitizeResponse
+    ExecuteERP --> SanitizeResponse
+
+    ResolvedCheck -- NO --> PromptFields["Prompt missing"]
+    CreatePending --> PromptFields
+
+    SanitizeResponse --> EndOutput([Output])
 
     %% Apply Styles
     class Start startNode;
     class UnrelatedCheck,ContextCheck,PrivacyCheck1,PrivacyCheck2,PrivacyCheck3,CapabilitiesCheck,SlashCheck,ActiveSessionCheck,CancelCheck,ResolvedCheck,HowToCheck,HowToRAGCheck,HowToERPCheck,ExactMatchCheck,ConfidenceCheck,ParamsCheck,PolicyRAGCheck yellowBox;
     class UnrelatedError,PrivacyError redBox;
-    class ReturnCapabilities,DispatchSlash,SummarizeSlash,SanitizeSlash,CancelSession,ParseInput,MapFields,PromptFields,ExecuteActiveERP,FormatActiveERP,Rewriter,HowToRAG,HowToERP,GuideOutput,NormalizeQuery,ReturnDirect,CosineSim,ConfirmRoute,CreatePending,ExecuteERP,FormatERP,PolicyRAG,ReturnRAG,InferSearchTool,DispatchSearch,SummarizeSearch greenBox;
+    class ReturnCapabilities,DispatchSlash,SummarizeSlash,SanitizeResponse,CancelSession,ParseInput,MapFields,PromptFields,ExecuteActiveERP,FormatActiveERP,Rewriter,HowToRAG,HowToERP,GuideOutput,NormalizeQuery,ReturnDirect,CosineSim,ConfirmRoute,CreatePending,ExecuteERP,FormatERP,PolicyRAG,ReturnRAG,InferSearchTool,DispatchSearch,SummarizeSearch greenBox;
 ```
 
 ---
