@@ -642,7 +642,11 @@
       "submit feedback",
       "I want to submit feedback",
       "I want to give feedback",
-      "I want to leave feedback"
+      "I want to leave feedback",
+      "I want to give feedback about the leave module",
+      "feedback about the attendance system",
+      "I have some feedback for the payroll app",
+      "give feedback on the fleet management module"
     ],
     "doctype": "ERP_Feedback_Suggestions",
     "frappe_method": "erp_support.put_api.create",
