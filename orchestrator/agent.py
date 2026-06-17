@@ -45,8 +45,7 @@ async def stream_text_word_by_word(text: str, *, end: str = "\n") -> None:
             await asyncio.sleep(WORD_STREAM_DELAY)
 
     if end:
-        sys.stdout.write(end.replace("\n", "<br/>"))
-        sys.stdout.write("\n")
+        sys.stdout.write(end)
         sys.stdout.flush()
 
 
