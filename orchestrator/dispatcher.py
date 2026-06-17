@@ -693,11 +693,29 @@ async def _run_agent(query: str, session_id: str | None = None):
                     from services.erp.tracking_client import execute_tracking_plan, format_tracking_response
                     tool_response = await execute_tracking_plan(plan)
                     result = format_tracking_response(tool_response)
+                    from services.erp.frappe_client import call_frappe
+                    try:
+                        await call_frappe({
+                            "tool": "axon.api.log_tool_usage",
+                            "http_method": "GET",
+                            "arguments": {"tool_name": route_name, "session_id": session_id}
+                        })
+                    except Exception:
+                        pass
                     if session_id and session_id in PENDING_ERP_SESSIONS:
                         del PENDING_ERP_SESSIONS[session_id]
                 elif method.startswith("erp_support.") or route_name.startswith("lost_found_"):
                     tool_response = await execute_erp_support_plan(plan)
                     result = await format_erp_support_response(plan, tool_response)
+                    from services.erp.frappe_client import call_frappe
+                    try:
+                        await call_frappe({
+                            "tool": "axon.api.log_tool_usage",
+                            "http_method": "GET",
+                            "arguments": {"tool_name": route_name, "session_id": session_id}
+                        })
+                    except Exception:
+                        pass
                     if session_id and session_id in PENDING_ERP_SESSIONS:
                         del PENDING_ERP_SESSIONS[session_id]
                 elif method.startswith("get_") or "list" in method or "query" in method:

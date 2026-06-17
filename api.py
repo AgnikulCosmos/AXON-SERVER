@@ -580,3 +580,29 @@ async def upload_file(file: UploadFile = File(...)):
 
 # Trigger reload config: switch to qwen2.5:0.5b
 
+@app.get("/v1/admin/dataset")
+async def get_dataset():
+    dataset_path = Path("dataset.json")
+    if not dataset_path.exists():
+        return JSONResponse(status_code=404, content={"error": "Dataset not found"})
+    import json
+    return JSONResponse(status_code=200, content=json.loads(dataset_path.read_text()))
+
+from fastapi import BackgroundTasks
+
+def build_db_in_background():
+    import subprocess
+    try:
+        subprocess.run(["python", "build_vector.py"], check=True)
+    except Exception as e:
+        logger.error(f"Failed to rebuild vector db: {e}")
+
+@app.post("/v1/admin/dataset/update")
+async def update_dataset(request: Request, background_tasks: BackgroundTasks):
+    data = await request.json()
+    dataset_path = Path("dataset.json")
+    import json
+    dataset_path.write_text(json.dumps(data, indent=2))
+    
+    background_tasks.add_task(build_db_in_background)
+    return {"success": True, "message": "Dataset updated, vector rebuild started."}

@@ -130,8 +130,6 @@ def keyword_search(query: str, k: int = 5) -> list:
 
         if score > 0:
             text_blocks = []
-            if item.get("title"):
-                text_blocks.append(item["title"])
             if item.get("content"):
                 text_blocks.append(item["content"])
             scored.append((score, "\n".join(text_blocks)))
