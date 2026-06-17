@@ -91,7 +91,7 @@ async def summarize_tool_output(
         title = tool_data.get("title") or "Wikipedia"
         formatted_data = f"### {title}\n\n{summary}"
         if url:
-            formatted_data += f"\n\n**Source:** [Wikipedia]({url})"
+            formatted_data += f"\n\nSource: [Wikipedia]({url})"
         
         for line in formatted_data.split("\n"):
             sys.stdout.write(line + "<br/>")
@@ -109,7 +109,7 @@ async def summarize_tool_output(
             url = res.get("href", "")
             if url and not url.endswith("#duckduckgo"):
                 url += "#duckduckgo"
-            lines.append(f"{i}. **[{title}]({url})**\n   {snippet}")
+            lines.append(f"{i}. [{title}]({url})\n{snippet}")
         formatted_data = "\n\n".join(lines)
         if not formatted_data:
             formatted_data = "No search results found."

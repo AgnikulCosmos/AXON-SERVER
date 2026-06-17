@@ -310,16 +310,24 @@ async def generate_title_endpoint(req: TitleGenerationRequest):
     prompt = TITLE_GENERATION_PROMPT.format(conversation_summary=conversation_summary)
 
     def get_fallback_title() -> str:
+        import re as _re
+        _greetings = {
+            "hi", "hello", "hey", "good morning", "good afternoon",
+            "good evening", "howdy", "yo", "sup", "greetings", "hiya"
+        }
         user_msg = ""
+        # Skip simple greetings — find the first meaningful user message
         for msg in messages:
-            if msg.get("role", "").lower() == "user":
-                user_msg = msg.get("content", "").strip()
+            if msg.get("role", "").lower() != "user":
+                continue
+            candidate = msg.get("content", "").strip()
+            if candidate.lower().rstrip("!?.,\'\"") not in _greetings and len(candidate) > 3:
+                user_msg = candidate
                 break
         if not user_msg:
             return "New Chat"
 
-        # Strip slash commands or prefixes if present
-        import re as _re
+        # Strip slash commands or action prefixes
         if user_msg.startswith(("/", "I want to ", "submit a ", "Raise a ")):
             clean_msg = _re.sub(r"^/[a-zA-Z0-9]+\s+", "", user_msg)
             clean_msg = _re.sub(r"^(I want to|submit a|Raise a|report a)\s+", "", clean_msg, flags=_re.IGNORECASE)
@@ -327,11 +335,7 @@ async def generate_title_endpoint(req: TitleGenerationRequest):
             clean_msg = user_msg
 
         words = clean_msg.split()
-        if len(words) <= 6:
-            fallback = " ".join(words)
-        else:
-            fallback = " ".join(words[:5]) + "..."
-
+        fallback = " ".join(words[:6]) if len(words) > 6 else " ".join(words)
         fallback = fallback.strip("\"'.,!?;: ")
         if fallback:
             fallback = fallback[0].upper() + fallback[1:]

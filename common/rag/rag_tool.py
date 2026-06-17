@@ -282,7 +282,20 @@ def rag_search(query: str) -> str:
             logger.info(f"[Question Match] score={best_score:.2f} query={query!r}")
             return best_content
 
-    # ── Step 2: Vector search + LLM (when DB is ready) ─────────────────
+    # ── Step 2: Keyword-first fast path (no LLM) ───────────────────────
+    # Run keyword search first. If we get a direct factual match, return it
+    # immediately without any LLM call. This prevents CPU timeouts.
+    kw_results_fast = keyword_search(query, k=2)
+    if kw_results_fast:
+        # Check if the result looks like a direct factual answer
+        # (not just a policy document that needs summarizing)
+        best_kw = kw_results_fast[0]
+        # Return direct keyword result if it's short/factual enough
+        if len(best_kw) < 1500:
+            logger.info(f"[RAG Fast Path] Returning keyword result directly for: {query!r}")
+            return best_kw
+
+    # ── Step 3: Vector search + LLM (when DB is ready) ─────────────────
     try:
         from common.llm.vector import get_vector_retriever
         retriever = get_vector_retriever()
