@@ -309,28 +309,56 @@ async def generate_title_endpoint(req: TitleGenerationRequest):
     from prompts.agent import TITLE_GENERATION_PROMPT
     prompt = TITLE_GENERATION_PROMPT.format(conversation_summary=conversation_summary)
 
+    def get_fallback_title() -> str:
+        user_msg = ""
+        for msg in messages:
+            if msg.get("role", "").lower() == "user":
+                user_msg = msg.get("content", "").strip()
+                break
+        if not user_msg:
+            return "New Chat"
+
+        # Strip slash commands or prefixes if present
+        import re as _re
+        if user_msg.startswith(("/", "I want to ", "submit a ", "Raise a ")):
+            clean_msg = _re.sub(r"^/[a-zA-Z0-9]+\s+", "", user_msg)
+            clean_msg = _re.sub(r"^(I want to|submit a|Raise a|report a)\s+", "", clean_msg, flags=_re.IGNORECASE)
+        else:
+            clean_msg = user_msg
+
+        words = clean_msg.split()
+        if len(words) <= 6:
+            fallback = " ".join(words)
+        else:
+            fallback = " ".join(words[:5]) + "..."
+
+        fallback = fallback.strip("\"'.,!?;: ")
+        if fallback:
+            fallback = fallback[0].upper() + fallback[1:]
+        return fallback or "New Chat"
+
     try:
-        async with httpx.AsyncClient(timeout=req.timeout or DEFAULT_TIMEOUT) as client:
+        # Limit generation to 8 seconds max on CPU, and restrict token output to 20 tokens
+        async with httpx.AsyncClient(timeout=8.0) as client:
             resp = await client.post(
                 f"{OLLAMA_BASE_URL}/api/chat",
                 json={
                     "model": TITLE_MODEL,
                     "messages": [{"role": "user", "content": prompt}],
                     "stream": False,
-                    "options": {"temperature": 0.2},
+                    "options": {"temperature": 0.2, "num_predict": 20},
                 },
             )
             resp.raise_for_status()
             data = resp.json()
 
         raw_title = (data.get("message", {}).get("content", "") or "").strip()
-
         title = raw_title.strip().strip("\"'").strip()
 
         if len(title) > 60:
             title = title[:57] + "..."
         elif len(title) < 3:
-            title = "New Chat"
+            title = get_fallback_title()
 
         return {
             "success": True,
@@ -340,11 +368,16 @@ async def generate_title_endpoint(req: TitleGenerationRequest):
             "batch_used": f"{start_idx + 1}-{end_idx}"
         }
 
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Title generation timeout")
-
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.warning(f"Failed to generate title with LLM ({e}). Falling back to heuristic.")
+        fallback_title = get_fallback_title()
+        return {
+            "success": True,
+            "title": fallback_title,
+            "message_count": total_messages,
+            "last_title_message_count": total_messages,
+            "batch_used": "fallback"
+        }
 
 @app.post("/v1/stream")
 async def stream_query(request: Request):

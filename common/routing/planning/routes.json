@@ -1142,7 +1142,11 @@
       "how are salaries calculated at Agnikul",
       "what is the ERP system used at Agnikul",
       "what are company benefits at Agnikul",
-      "what is the overtime policy"
+      "what is the overtime policy",
+      "how many rockets they have launched",
+      "how many rockets has Agnikul launched",
+      "how many launches have been done by Agnikul",
+      "Agnikul rocket launch count"
     ],
     "doctype": "",
     "frappe_method": "",

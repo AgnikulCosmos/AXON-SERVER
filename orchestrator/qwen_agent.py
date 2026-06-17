@@ -85,12 +85,40 @@ async def summarize_tool_output(
     tool_name: str,
     tool_data: any
 ) -> str:
+    if tool_name == "wiki" and isinstance(tool_data, dict):
+        summary = tool_data.get("summary") or tool_data.get("extract") or ""
+        url = tool_data.get("url") or ""
+        title = tool_data.get("title") or "Wikipedia"
+        formatted_data = f"### {title}\n\n{summary}"
+        if url:
+            formatted_data += f"\n\n**Source:** [Wikipedia]({url})"
+        
+        for line in formatted_data.split("\n"):
+            sys.stdout.write(line + "<br/>")
+            sys.stdout.flush()
+            await asyncio.sleep(0.01)
+        return formatted_data
+
     if tool_name == "ddgs" and isinstance(tool_data, dict):
         results = tool_data.get("results", [])
-        for res in results:
-            url = res.get("href")
+        lines = []
+        for i, res in enumerate(results[:3], start=1):
+            title = res.get("title", "Search Result").strip()
+            title = re.sub(r'[\[\]]', '', title)  # clean brackets
+            snippet = res.get("body", "No description available.").strip()
+            url = res.get("href", "")
             if url and not url.endswith("#duckduckgo"):
-                res["href"] = url + "#duckduckgo"
+                url += "#duckduckgo"
+            lines.append(f"{i}. **[{title}]({url})**\n   {snippet}")
+        formatted_data = "\n\n".join(lines)
+        if not formatted_data:
+            formatted_data = "No search results found."
+        
+        for line in formatted_data.split("\n"):
+            sys.stdout.write(line + "<br/>")
+            sys.stdout.flush()
+            await asyncio.sleep(0.01)
+        return formatted_data
 
     if tool_name == "arxiv":
         formatted_data = str(tool_data)
@@ -100,10 +128,7 @@ async def summarize_tool_output(
             await asyncio.sleep(0.01)
         return formatted_data
 
-    if False:
-        pass
-    else:
-        prompt = SUMMARIZE_TOOL_OUTPUT_PROMPT.format(user_query=user_query, tool_data=tool_data)
+    prompt = SUMMARIZE_TOOL_OUTPUT_PROMPT.format(user_query=user_query, tool_data=tool_data)
 
     messages = [
         SystemMessage(content=AXON_IDENTITY_PROMPT),
