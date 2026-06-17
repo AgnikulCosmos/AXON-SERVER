@@ -342,8 +342,8 @@ async def generate_title_endpoint(req: TitleGenerationRequest):
         return fallback or "New Chat"
 
     try:
-        # Limit generation to 8 seconds max on CPU, and restrict token output to 20 tokens
-        async with httpx.AsyncClient(timeout=8.0) as client:
+        # Limit generation to 30 seconds max on CPU, and restrict token output to 20 tokens
+        async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 f"{OLLAMA_BASE_URL}/api/chat",
                 json={

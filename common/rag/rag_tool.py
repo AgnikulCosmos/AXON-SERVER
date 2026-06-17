@@ -110,23 +110,18 @@ def keyword_search(query: str, k: int = 5) -> list:
                 stems.append(word[:-3])
 
             matched = False
-            for stem in stems:
-                if stem in title:
-                    score += 3
-                    matched = True
-                if stem in content:
-                    score += 2
-                    matched = True
-                for kw in kw_list:
-                    if stem in kw:
-                        score += 4
-                        matched = True
-                for q in q_list:
-                    if stem in q:
-                        score += 3
-                        matched = True
-                if matched:
-                    break
+            if any(stem in title for stem in stems):
+                score += 3
+                matched = True
+            if any(stem in content for stem in stems):
+                score += 2
+                matched = True
+            if any(stem in kw for kw in kw_list for stem in stems):
+                score += 4
+                matched = True
+            if any(stem in q for q in q_list for stem in stems):
+                score += 3
+                matched = True
 
         # Bonus: full query matches a stored question
         for q in q_list:
