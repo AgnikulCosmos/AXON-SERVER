@@ -4,6 +4,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from orchestrator.agent import (
     MARKER_FINAL_START,
     MARKER_FINAL_END,
+    stream_text_word_by_word
 )
 
 import os
@@ -93,10 +94,7 @@ async def summarize_tool_output(
         if url:
             formatted_data += f"\n\nSource: [Wikipedia]({url})"
         
-        for line in formatted_data.split("\n"):
-            sys.stdout.write(line + "<br/>")
-            sys.stdout.flush()
-            await asyncio.sleep(0.01)
+        await stream_text_word_by_word(formatted_data)
         return formatted_data
 
     if tool_name == "ddgs" and isinstance(tool_data, dict):
@@ -114,18 +112,12 @@ async def summarize_tool_output(
         if not formatted_data:
             formatted_data = "No search results found."
         
-        for line in formatted_data.split("\n"):
-            sys.stdout.write(line + "<br/>")
-            sys.stdout.flush()
-            await asyncio.sleep(0.01)
+        await stream_text_word_by_word(formatted_data)
         return formatted_data
 
     if tool_name == "arxiv":
         formatted_data = str(tool_data)
-        for line in formatted_data.split("\n"):
-            sys.stdout.write(line + "<br/>")
-            sys.stdout.flush()
-            await asyncio.sleep(0.01)
+        await stream_text_word_by_word(formatted_data)
         return formatted_data
 
     prompt = SUMMARIZE_TOOL_OUTPUT_PROMPT.format(user_query=user_query, tool_data=tool_data)
