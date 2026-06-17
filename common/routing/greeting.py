@@ -26,7 +26,7 @@ def is_greeting(text: str) -> bool:
     Deterministic, rule-based check.
     """
     normalized = text.lower().strip()
-    
+
     # Check if the entire message is a short greeting
     for pattern in GREETING_PATTERNS:
         if normalized == pattern:
@@ -34,7 +34,13 @@ def is_greeting(text: str) -> bool:
         # Also match with punctuation: "hi!" "hello?"
         if normalized.rstrip("!?.,") == pattern:
             return True
-    
+
+    # Also match "hello axon", "hi axon", "hey there axon" etc.
+    # Short message (≤4 words) that starts with a greeting word
+    words = normalized.rstrip("!?.,").split()
+    if len(words) <= 4 and words and words[0] in GREETING_PATTERNS:
+        return True
+
     return False
 
 

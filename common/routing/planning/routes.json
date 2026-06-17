@@ -506,7 +506,17 @@
       "I am facing a lag issue in Fleet Management",
       "I am having an issue with the Fleet Management app",
       "I am facing a bug in the Payroll app",
-      "something is wrong with the Fleet Management app"
+      "something is wrong with the Fleet Management app",
+      "the payroll module is not loading",
+      "payroll is not working",
+      "I have a bug in the attendance module",
+      "attendance module has an issue",
+      "the HR module is broken",
+      "there is an issue with the Finance module",
+      "Manufacturing module not working",
+      "the leave module is throwing an error",
+      "ERP module is down",
+      "I am getting an error in ERP"
     ],
     "doctype": "ERP_Tickets",
     "frappe_method": "erp_support.put_api.create",
@@ -700,7 +710,13 @@
       "suggest an improvement for Dashboard with medium priority",
       "create suggestion for app uhjkm with feedback d and helps d",
       "create a suggestion",
-      "submit a suggestion"
+      "submit a suggestion",
+      "I have a suggestion for the canteen system",
+      "I have a suggestion for the leave module",
+      "I want to suggest an improvement for the attendance system",
+      "suggestion for payroll app",
+      "I have an idea to improve the ERP system",
+      "I want to recommend a feature for the fleet module"
     ],
     "doctype": "ERP_Feedback_Suggestions",
     "frappe_method": "erp_support.put_api.create",
@@ -929,7 +945,13 @@
       "record lost charger in lab",
       "I lost my wallet today",
       "report a lost item",
-      "register a found item"
+      "register a found item",
+      "I found a laptop bag near the entrance",
+      "I found someone's ID card in the cafeteria",
+      "I found a water bottle in the conference room",
+      "I lost my access card today",
+      "I lost my laptop charger in the office",
+      "I found a key on the staircase"
     ],
     "doctype": "Lost And Found",
     "frappe_method": "core.factory.api.post_data",
