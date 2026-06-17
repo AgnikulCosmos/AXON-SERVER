@@ -8,9 +8,10 @@ DATASET_PATH = "dataset.json"
 DB_PATH = "./chroma_langchain_db_user"
 COLLECTION_NAME = "agnikul_data"
 
+from common.llm.ollama_helper import get_working_ollama_base_url
 embeddings = OllamaEmbeddings(
     model=os.getenv("EMBEDDING_MODEL", "nomic-embed-text"),
-    base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    base_url=get_working_ollama_base_url()
 )
 
 

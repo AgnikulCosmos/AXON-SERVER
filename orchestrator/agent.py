@@ -59,7 +59,8 @@ async def stream_text_word_by_word(text: str, *, end: str = "\n") -> None:
 #     reasoning=True, 
 # )
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+from common.llm.ollama_helper import get_working_ollama_base_url
+OLLAMA_BASE_URL = get_working_ollama_base_url()
 
 llm = ChatOllama(
     model=os.getenv("LLM_MODEL", "qwen3.5:0.8b"),

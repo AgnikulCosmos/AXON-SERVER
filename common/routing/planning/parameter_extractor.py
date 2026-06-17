@@ -23,8 +23,8 @@ from langchain_ollama import ChatOllama
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ── Task 7: Configurable Ollama URL ─────────────────────────────────────────
-OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+from common.llm.ollama_helper import get_working_ollama_base_url
+OLLAMA_URL = get_working_ollama_base_url()
 
 # ── LLM for parameter extraction ────────────────────────────────────────────
 _extractor_llm = ChatOllama(

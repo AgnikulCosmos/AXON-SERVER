@@ -10,8 +10,8 @@ Supports configurable Ollama URL via OLLAMA_BASE_URL environment variable.
 import os
 import requests
 import numpy as np
-
-OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+from common.llm.ollama_helper import get_working_ollama_base_url
+OLLAMA_URL = get_working_ollama_base_url()
 EMBED_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
 
 

@@ -35,7 +35,8 @@ from orchestrator.agent import (
 
 logger = logging.getLogger("api")
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+from common.llm.ollama_helper import get_working_ollama_base_url
+OLLAMA_BASE_URL = get_working_ollama_base_url()
 TITLE_MODEL = os.getenv("LLM_MODEL", "qwen3.5:0.8b")
 
 
@@ -94,6 +95,17 @@ async def _ensure_ollama_models():
             logger.info(f"Model '{model}' is ready.")
         else:
             logger.error(f"Model '{model}' could not be pulled after retries")
+
+    try:
+        logger.info("Pre-building semantic router embeddings...")
+        from common.routing.router import _get_intent_router
+        loop = asyncio.get_running_loop()
+        router = await loop.run_in_executor(None, _get_intent_router)
+        await loop.run_in_executor(None, router._get_semantic)
+        logger.info("Semantic router embeddings are pre-built and ready.")
+    except Exception as e:
+        logger.error(f"Failed to pre-build semantic router embeddings: {e}")
+
 
 
 @asynccontextmanager
