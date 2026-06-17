@@ -67,7 +67,7 @@ async def _confirm_route_with_llm(query: str, route_desc: str) -> bool:
             resp = await client.generate(
                 model=model,
                 prompt=prompt,
-                options={"temperature": 0.0, "num_predict": 5}
+                options={"temperature": 0.0, "num_predict": 120}
             )
             ans = resp.get("response", "").strip()
             ans = re.sub(r'[^0-9]', '', ans)
@@ -78,6 +78,34 @@ async def _confirm_route_with_llm(query: str, route_desc: str) -> bool:
         logger.warning(f"Failed to confirm route with LLM: {e}")
 
     return False
+
+
+def _heuristic_disambiguation(query: str, category: str) -> Optional[str]:
+    q = query.lower()
+    view_words = {"show", "view", "list", "check", "track", "history", "status", "active", "find"}
+    create_words = {"create", "submit", "raise", "report", "new", "make", "add", "post", "file", "register"}
+
+    if category == "ticket":
+        if any(w in q for w in view_words):
+            return "erp_tickets_list"
+        if any(w in q for w in create_words) or "lag" in q or "bug" in q or "issue" in q or "error" in q:
+            return "erp_tickets_create"
+    elif category == "feedback":
+        if any(w in q for w in view_words):
+            return "erp_feedback_list"
+        if any(w in q for w in create_words) or "feedback" in q:
+            return "erp_feedback_create"
+    elif category == "suggestion":
+        if any(w in q for w in view_words):
+            return "erp_suggestions_list"
+        if any(w in q for w in create_words) or "suggest" in q or "suggestion" in q:
+            return "erp_suggestion_create"
+    elif category == "lost_found":
+        if any(w in q for w in view_words):
+            return "lost_found_list"
+        if any(w in q for w in create_words) or "lost" in q or "found" in q:
+            return "lost_found_create"
+    return None
 
 
 async def _disambiguate_route_with_llm(query: str, route_name: str) -> str:
@@ -93,6 +121,11 @@ async def _disambiguate_route_with_llm(query: str, route_name: str) -> str:
 
     if not category:
         return route_name
+
+    h_route = _heuristic_disambiguation(query, category)
+    if h_route:
+        logger.info(f"[Heuristic Disambiguation] Query: {query!r} | Category: {category} -> {h_route}")
+        return h_route
 
     if category == "ticket":
         options = {"create": "erp_tickets_create", "view": "erp_tickets_list"}
@@ -115,7 +148,7 @@ async def _disambiguate_route_with_llm(query: str, route_name: str) -> str:
             resp = await client.generate(
                 model=model,
                 prompt=prompt,
-                options={"temperature": 0.0, "num_predict": 5}
+                options={"temperature": 0.0, "num_predict": 120}
             )
             ans = resp.get("response", "").strip().lower()
             ans = re.sub(r'[^a-z]', '', ans)

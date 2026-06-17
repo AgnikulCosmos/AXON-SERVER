@@ -91,7 +91,7 @@ class SemanticRouter:
             # 1. Embed description
             desc_text = route.get("description", "")
             if desc_text.strip():
-                desc_emb = get_embedding(desc_text)
+                desc_emb = get_embedding(desc_text.lower().strip())
                 embeddings.append(desc_emb)
                 self.index_to_route_name.append(route_name)
 
@@ -99,7 +99,7 @@ class SemanticRouter:
             examples = route.get("examples", [])
             for ex in examples:
                 if ex.strip():
-                    ex_emb = get_embedding(ex)
+                    ex_emb = get_embedding(ex.lower().strip())
                     embeddings.append(ex_emb)
                     self.index_to_route_name.append(route_name)
 
@@ -129,7 +129,7 @@ class SemanticRouter:
     # Match route
     # ---------------------------
     def match(self, query: str):
-        query_embedding = get_embedding(query)
+        query_embedding = get_embedding(query.lower().strip())
 
         similarities = self._cosine_similarity(
             query_embedding,

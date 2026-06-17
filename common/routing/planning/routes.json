@@ -501,7 +501,12 @@
       "raise a ticket",
       "create a support ticket",
       "submit a support ticket for Fleet Management app with description: Test description",
-      "submit a support ticket for Fleet Management app"
+      "submit a support ticket for Fleet Management app",
+      "I am facing a loading lag issue in Fleet Management.",
+      "I am facing a lag issue in Fleet Management",
+      "I am having an issue with the Fleet Management app",
+      "I am facing a bug in the Payroll app",
+      "something is wrong with the Fleet Management app"
     ],
     "doctype": "ERP_Tickets",
     "frappe_method": "erp_support.put_api.create",
@@ -624,7 +629,10 @@
       "I want to give feedback for the dashboard app",
       "Submit a feedback",
       "give feedback",
-      "submit feedback"
+      "submit feedback",
+      "I want to submit feedback",
+      "I want to give feedback",
+      "I want to leave feedback"
     ],
     "doctype": "ERP_Feedback_Suggestions",
     "frappe_method": "erp_support.put_api.create",
@@ -1065,6 +1073,12 @@
     "route_name": "RAG",
     "description": "Retrieve internal knowledge about Agnikul Cosmos \u2014 company policies, HR rules, leave policies, company history, founders, vehicles like Agnibaan and Agnilet, milestones, launches, SDSC, SHAR, ISRO, canteen menu, reimbursements, payroll, attendance, shifts, holidays, fleets, and all internal enterprise information that is not publicly available.",
     "examples": [
+      "what is the casual leave policy",
+      "casual leave policy",
+      "what is the sick leave policy",
+      "sick leave policy",
+      "what is the leave policy",
+      "leave policy",
       "what is the leave policy at Agnikul",
       "how many casual leaves do employees get",
       "what is the canteen menu for today",
