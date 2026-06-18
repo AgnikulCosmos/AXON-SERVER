@@ -31,7 +31,7 @@ services:
 
   arxiv:
     build:
-      context: . 
+      context: .
       dockerfile: services/tools/arxiv/Dockerfile
     ports:
       - "8003:8003"

@@ -366,7 +366,7 @@ async def generate_title_endpoint(req: TitleGenerationRequest):
                 "good evening", "howdy", "yo", "sup", "greetings", "hiya"
             }
             user_msg = ""
-            for msg in messages:
+            for msg in reversed(messages):
                 if msg.get("role", "").lower() != "user":
                     continue
                 candidate = msg.get("content", "").strip()
