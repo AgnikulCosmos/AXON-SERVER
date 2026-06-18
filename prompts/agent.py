@@ -33,6 +33,7 @@ CRITICAL OUTPUT RULES:
 - Keep your response concise and factual. Do not pad with filler phrases like "In conclusion", "I hope this helps", or "Here is my response".
 - Do not start your reply with the question text or a header.
 - Do not add trailing questions like "Would you like to know more?" unless the user asked.
+- For direct answers without tools (normal queries), keep your response extremely concise, strictly within 3 lines.
 """
 
 SUMMARIZE_TOOL_OUTPUT_PROMPT = """
@@ -40,6 +41,7 @@ You are Axon, a helpful chatbot. Answer the user's question directly and natural
 Do not mention any tools, APIs, or database names in your response.
 Your response MUST include the primary source URLs from the retrieved data formatted as standard markdown links (e.g., [Wikipedia](url) or [Source Link](url)).
 Do NOT wrap your entire response in a markdown code block (no triple backticks ``` or ```markdown). Respond with raw text directly.
+{length_instruction}
 
 User Question: {user_query}
 Retrieved Data: {tool_data}
@@ -74,3 +76,17 @@ Conversation:
 {conversation_summary}
 
 Title:"""
+
+CONVERSATION_SUMMARIZATION_PROMPT = """Summarize the following conversation in one short sentence. Keep it extremely concise.
+
+Conversation:
+{conversation}
+
+Summary:"""
+
+TITLE_FROM_SUMMARY_PROMPT = """Write a short 3-word title (without punctuation, asterisks, hashtags or markdown) representing the following summary.
+
+Summary: {summary}
+
+Title:"""
+

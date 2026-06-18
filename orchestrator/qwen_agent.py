@@ -86,39 +86,46 @@ async def summarize_tool_output(
     tool_name: str,
     tool_data: any
 ) -> str:
-    if tool_name == "wiki" and isinstance(tool_data, dict):
-        summary = tool_data.get("summary") or tool_data.get("extract") or ""
-        url = tool_data.get("url") or ""
-        title = tool_data.get("title") or "Wikipedia"
-        if url:
-            formatted_data = f"[{title}]({url})\n\n{summary}"
-        else:
-            formatted_data = f"{title}\n\n{summary}"
-        await stream_text_word_by_word(formatted_data)
-        return formatted_data
-
-    if tool_name == "ddgs" and isinstance(tool_data, dict):
-        results = tool_data.get("results", [])
-        if results:
-            res = results[0]
-            title = re.sub(r'[\[\]]', '', res.get("title", "Search Result").strip())
-            snippet = res.get("body", "No description available.").strip()
-            url = res.get("href", "")
-            if url:
-                formatted_data = f"[{title}]({url})\n\n{snippet}"
-            else:
-                formatted_data = f"{title}\n\n{snippet}"
-        else:
-            formatted_data = "No search results found."
-        await stream_text_word_by_word(formatted_data)
-        return formatted_data
-
     if tool_name == "arxiv":
         formatted_data = str(tool_data)
         await stream_text_word_by_word(formatted_data)
         return formatted_data
 
-    prompt = SUMMARIZE_TOOL_OUTPUT_PROMPT.format(user_query=user_query, tool_data=tool_data)
+    # Determine length instruction and format data for LLM
+    length_instruction = ""
+    tool_data_for_llm = tool_data
+
+    if tool_name == "ddgs" and isinstance(tool_data, dict):
+        # Check if the query is a technical/space topic
+        space_stems = {"rocket", "propulsion", "engine", "launch", "space", "satellite", "mission", "booster"}
+        q_lower = user_query.lower()
+        is_space_query = any(stem in q_lower for stem in space_stems)
+        if is_space_query:
+            length_instruction = "Your response (excluding links) MUST be exactly 6-7 lines long."
+        else:
+            length_instruction = "Your response (excluding links) MUST be exactly a single sentence on a single line (one line only)."
+        
+        results = tool_data.get("results", [])
+        formatted_results = []
+        for r in results[:4]:
+            r_title = r.get("title", "Search Result")
+            r_url = r.get("href", "")
+            r_snippet = r.get("body", "")
+            formatted_results.append(f"- Title: {r_title}\n  URL: {r_url}\n  Snippet: {r_snippet}")
+        tool_data_for_llm = "\n\n".join(formatted_results)
+
+    elif tool_name == "wiki" and isinstance(tool_data, dict):
+        length_instruction = "Your response (excluding links) MUST be exactly 3-4 lines long."
+        title = tool_data.get("title") or "Wikipedia"
+        summary = tool_data.get("summary") or tool_data.get("extract") or ""
+        url = tool_data.get("url") or ""
+        tool_data_for_llm = f"Source: {title} ({url})\nContent: {summary}"
+
+    prompt = SUMMARIZE_TOOL_OUTPUT_PROMPT.format(
+        length_instruction=length_instruction,
+        user_query=user_query,
+        tool_data=tool_data_for_llm
+    )
 
     messages = [
         SystemMessage(content=AXON_IDENTITY_PROMPT),
@@ -153,7 +160,7 @@ async def summarize_tool_output(
                 sources.append(f"[{title}]({url})")
         if sources:
             sources_str = "\n\n**Sources:** " + " | ".join(sources)
-            sys.stdout.write(sources_str.replace("\n", "<br/>"))
+            sys.stdout.write("\n" + sources_str.replace("\n", "<br/>") + "\n")
             sys.stdout.flush()
             response_str += sources_str
     elif tool_name == "wiki" and isinstance(tool_data, dict):
@@ -161,7 +168,7 @@ async def summarize_tool_output(
         title = tool_data.get("title") or "Wikipedia"
         if url:
             sources_str = f"\n\n**Sources:** [{title}]({url})"
-            sys.stdout.write(sources_str.replace("\n", "<br/>"))
+            sys.stdout.write("\n" + sources_str.replace("\n", "<br/>") + "\n")
             sys.stdout.flush()
             response_str += sources_str
 

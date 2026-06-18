@@ -226,124 +226,11 @@ async def query_endpoint(req: QueryRequest, request: Request):
             }
         )
 
-@app.post("/v1/generate-title")
-async def generate_title_endpoint(req: TitleGenerationRequest):
-    """
-    Title generation with strict 5-message batching logic.
-    """
+_title_locks = {}
 
-    messages = req.messages or []
-    total_messages = len(messages)
-    last_title_count = req.last_title_message_count or 0
-    force = req.force
-
-    if total_messages == 0:
-        return {
-            "success": True,
-            "title": "New Chat",
-            "message_count": 0
-        }
-
-    # -------------------------------
-    # BATCHING LOGIC (Exact Logic)
-    # -------------------------------
-
-    current_completed_batch = total_messages // 5
-    last_completed_batch = last_title_count // 5 if last_title_count > 0 else 0
-
-    if last_title_count == 0 and total_messages >= 1:
-        should_generate = True
-    elif current_completed_batch > last_completed_batch:
-        should_generate = True
-    else:
-        should_generate = False
-
-    if not should_generate and not force:
-        return {
-            "success": True,
-            "skipped": True,
-            "message_count": total_messages,
-            "next_update_at": (current_completed_batch + 1) * 5
-        }
-
-    # -------------------------------
-    # DETERMINE MESSAGE RANGE
-    # -------------------------------
-
-    if last_title_count == 0:
-        start_idx = 0
-        end_idx = total_messages
-    else:
-        batch_to_use = current_completed_batch
-        start_idx = (batch_to_use - 1) * 5
-        end_idx = min(start_idx + 5, total_messages)
-
-    batch_messages = messages[start_idx:end_idx]
-
-    # -------------------------------
-    # GREETING FILTER
-    # -------------------------------
-
-    meaningful_messages = []
-    for msg in batch_messages:
-        content = (msg.get("content") or "").strip().lower()
-        content_clean = content.rstrip("!?.,'\"\r\n")
-        if content_clean not in SIMPLE_GREETINGS:
-            meaningful_messages.append(msg)
-
-    if not meaningful_messages:
-        meaningful_messages = batch_messages
-
-    # -------------------------------
-    # BUILD PROMPT
-    # -------------------------------
-
-    messages_text = []
-    for msg in meaningful_messages:
-        role = msg.get("role", "User")
-        content = msg.get("content", "")[:200]
-        messages_text.append(f"{role}: {content}")
-
-    conversation_summary = "\n".join(messages_text)
-
-    from prompts.agent import TITLE_GENERATION_PROMPT
-    prompt = TITLE_GENERATION_PROMPT.format(conversation_summary=conversation_summary)
-
-    def get_fallback_title() -> str:
-        import re as _re
-        _greetings = {
-            "hi", "hello", "hey", "good morning", "good afternoon",
-            "good evening", "howdy", "yo", "sup", "greetings", "hiya"
-        }
-        user_msg = ""
-        # Skip simple greetings — find the first meaningful user message
-        for msg in messages:
-            if msg.get("role", "").lower() != "user":
-                continue
-            candidate = msg.get("content", "").strip()
-            if candidate.lower().rstrip("!?.,\'\"") not in _greetings and len(candidate) > 3:
-                user_msg = candidate
-                break
-        if not user_msg:
-            return "New Chat"
-
-        # Strip slash commands or action prefixes
-        if user_msg.startswith(("/", "I want to ", "submit a ", "Raise a ")):
-            clean_msg = _re.sub(r"^/[a-zA-Z0-9]+\s+", "", user_msg)
-            clean_msg = _re.sub(r"^(I want to|submit a|Raise a|report a)\s+", "", clean_msg, flags=_re.IGNORECASE)
-        else:
-            clean_msg = user_msg
-
-        words = clean_msg.split()
-        fallback = " ".join(words[:6]) if len(words) > 6 else " ".join(words)
-        fallback = fallback.strip("\"'.,!?;: ")
-        if fallback:
-            fallback = fallback[0].upper() + fallback[1:]
-        return fallback or "New Chat"
-
+async def _call_ollama(prompt: str, max_tokens: int = 30) -> str:
     try:
-        # Use completion endpoint with template override to bypass thinking process and generate instantly
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 f"{OLLAMA_BASE_URL}/api/generate",
                 json={
@@ -351,66 +238,196 @@ async def generate_title_endpoint(req: TitleGenerationRequest):
                     "prompt": prompt,
                     "template": "{{ .Prompt }}",
                     "stream": False,
-                    "options": {"temperature": 0.0, "num_predict": 30},
+                    "options": {"temperature": 0.0, "num_predict": max_tokens},
                 },
             )
             resp.raise_for_status()
             data = resp.json()
-
         response_text = data.get("response", "") or ""
         thinking_text = data.get("thinking", "") or ""
         
-        raw_title = ""
+        raw_val = ""
         if thinking_text:
             if "<think>" in thinking_text:
-                raw_title = thinking_text.split("<think>")[0].strip()
+                raw_val = thinking_text.split("<think>")[0].strip()
             else:
-                raw_title = thinking_text.strip()
+                raw_val = thinking_text.strip()
         
-        if not raw_title:
-            raw_title = response_text.strip()
+        if not raw_val:
+            raw_val = response_text.strip()
 
         # Take only the first non-empty line
         first_line = ""
-        for line in raw_title.splitlines():
+        for line in raw_val.splitlines():
             line = line.strip()
             if line:
                 first_line = line
                 break
-        raw_title = first_line or raw_title
+        raw_val = first_line or raw_val
 
         # Strip model special tokens that leak into output
         import re as _re
-        raw_title = _re.sub(r'<\|[^|>]+\|>', '', raw_title)
-        raw_title = _re.sub(r'<\[[^\]]+\]>', '', raw_title)
-        raw_title = _re.sub(r'</?think>', '', raw_title)
-        raw_title = _re.sub(r'\s+', ' ', raw_title).strip()
+        raw_val = _re.sub(r'<\|[^|>]+\|>', '', raw_val)
+        raw_val = _re.sub(r'<\[[^\]]+\]>', '', raw_val)
+        raw_val = _re.sub(r'</?think>', '', raw_val)
+        raw_val = _re.sub(r'\s+', ' ', raw_val).strip()
 
-        title = raw_title.strip("\"'").strip()
-
-        if len(title) > 60:
-            title = title[:57] + "..."
-        elif len(title) < 3:
-            title = get_fallback_title()
-
-        return {
-            "success": True,
-            "title": title,
-            "message_count": total_messages,
-            "last_title_message_count": total_messages,
-            "batch_used": f"{start_idx + 1}-{end_idx}"
-        }
-
+        return raw_val
     except Exception as e:
-        logger.warning(f"Failed to generate title with LLM ({e}). Falling back to heuristic.")
-        fallback_title = get_fallback_title()
-        return {
-            "success": True,
-            "title": fallback_title,
-            "message_count": total_messages,
-            "last_title_message_count": total_messages,
-            "batch_used": "fallback"
-        }
+        logger.warning(f"Failed to generate output with LLM: {e}")
+        return ""
+
+
+@app.post("/v1/generate-title")
+async def generate_title_endpoint(req: TitleGenerationRequest):
+    """
+    Title generation with strict 5-message batching logic and session-based serialization queue.
+    """
+    session_id = req.session_id or "default"
+    if session_id not in _title_locks:
+        _title_locks[session_id] = asyncio.Lock()
+
+    async with _title_locks[session_id]:
+        messages = req.messages or []
+        total_messages = len(messages)
+        last_title_count = req.last_title_message_count or 0
+        force = req.force
+
+        if total_messages == 0:
+            return {
+                "success": True,
+                "title": "New Chat",
+                "message_count": 0
+            }
+
+        # -------------------------------
+        # BATCHING LOGIC (Exact Logic)
+        # -------------------------------
+        current_completed_batch = total_messages // 5
+        last_completed_batch = last_title_count // 5 if last_title_count > 0 else 0
+
+        if last_title_count == 0 and total_messages >= 1:
+            should_generate = True
+        elif current_completed_batch > last_completed_batch:
+            should_generate = True
+        else:
+            should_generate = False
+
+        if not should_generate and not force:
+            return {
+                "success": True,
+                "skipped": True,
+                "message_count": total_messages,
+                "next_update_at": (current_completed_batch + 1) * 5
+            }
+
+        # -------------------------------
+        # DETERMINE MESSAGE RANGE
+        # -------------------------------
+        if last_title_count == 0:
+            end_idx = total_messages
+        else:
+            batch_to_use = current_completed_batch
+            end_idx = min((batch_to_use) * 5, total_messages)
+
+        context_messages = messages[:end_idx]
+
+        # -------------------------------
+        # GREETING FILTER
+        # -------------------------------
+        meaningful_messages = []
+        for msg in context_messages:
+            content = (msg.get("content") or "").strip().lower()
+            content_clean = content.rstrip("!?.,'\"\r\n")
+            if content_clean not in SIMPLE_GREETINGS:
+                meaningful_messages.append(msg)
+
+        if not meaningful_messages:
+            meaningful_messages = context_messages
+
+        # -------------------------------
+        # BUILD CONVERSATION TEXT
+        # -------------------------------
+        messages_text = []
+        for msg in meaningful_messages:
+            role = msg.get("role", "User")
+            content = msg.get("content", "")[:200]
+            messages_text.append(f"{role}: {content}")
+
+        conversation_text = "\n".join(messages_text)
+
+        def get_fallback_title() -> str:
+            import re as _re
+            _greetings = {
+                "hi", "hello", "hey", "good morning", "good afternoon",
+                "good evening", "howdy", "yo", "sup", "greetings", "hiya"
+            }
+            user_msg = ""
+            for msg in messages:
+                if msg.get("role", "").lower() != "user":
+                    continue
+                candidate = msg.get("content", "").strip()
+                if candidate.lower().rstrip("!?.,\'\"") not in _greetings and len(candidate) > 3:
+                    user_msg = candidate
+                    break
+            if not user_msg:
+                return "New Chat"
+
+            if user_msg.startswith(("/", "I want to ", "submit a ", "Raise a ")):
+                clean_msg = _re.sub(r"^/[a-zA-Z0-9]+\s+", "", user_msg)
+                clean_msg = _re.sub(r"^(I want to|submit a|Raise a|report a)\s+", "", clean_msg, flags=_re.IGNORECASE)
+            else:
+                clean_msg = user_msg
+
+            words = clean_msg.split()
+            fallback = " ".join(words[:6]) if len(words) > 6 else " ".join(words)
+            fallback = fallback.strip("\"'.,!?;: ")
+            fallback = _re.sub(r'[*#_`~]', '', fallback).strip()
+            if fallback:
+                fallback = fallback[0].upper() + fallback[1:]
+            return fallback or "New Chat"
+
+        try:
+            from prompts.agent import CONVERSATION_SUMMARIZATION_PROMPT, TITLE_FROM_SUMMARY_PROMPT
+            
+            # Step 1: Summarize context
+            sum_prompt = CONVERSATION_SUMMARIZATION_PROMPT.format(conversation=conversation_text)
+            summary = await _call_ollama(sum_prompt, max_tokens=100)
+            if not summary:
+                summary = conversation_text[:200]
+
+            # Step 2: Generate title from summary
+            title_prompt = TITLE_FROM_SUMMARY_PROMPT.format(summary=summary)
+            title = await _call_ollama(title_prompt, max_tokens=30)
+            
+            # Remove *, # like markdown styling
+            import re as _re
+            title = _re.sub(r'[*#_`~]', '', title).strip()
+            title = title.strip("\"'").strip()
+
+            if len(title) > 60:
+                title = title[:57] + "..."
+            elif len(title) < 3:
+                title = get_fallback_title()
+
+            return {
+                "success": True,
+                "title": title,
+                "message_count": total_messages,
+                "last_title_message_count": total_messages,
+                "batch_used": f"1-{end_idx}"
+            }
+
+        except Exception as e:
+            logger.warning(f"Failed to generate title with LLM ({e}). Falling back to heuristic.")
+            fallback_title = get_fallback_title()
+            return {
+                "success": True,
+                "title": fallback_title,
+                "message_count": total_messages,
+                "last_title_message_count": total_messages,
+                "batch_used": "fallback"
+            }
 
 @app.post("/v1/stream")
 async def stream_query(request: Request):

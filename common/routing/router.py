@@ -249,6 +249,15 @@ async def route_query(query: str) -> str:
         logger.info(f"[Router] Forcing RAG for Agnikul-domain query: {query!r}")
         return "RAG"
 
+    # Intercept disallowed actions/creations and route to RAG early.
+    action_verbs = {"apply", "book", "order", "request", "raise", "submit", "create", "regularize", "regularise", "cancel"}
+    disallowed_nouns = {"leave", "food", "meal", "dinner", "lunch", "breakfast", "attendance", "permission", "reimbursement", "id card"}
+    q_clean = q_lower.replace("-", " ")
+    words = set(re.findall(r'\b[a-z0-9]+\b', q_clean))
+    if (words & action_verbs) and (words & disallowed_nouns):
+        logger.info(f"[Router] Intercepting disallowed ERP creation/action early for query {query!r} -> Forcing RAG")
+        return "RAG"
+
     # Normalize query — fix domain-specific typos before embedding lookup
     normalized_query = _normalize_query(query)
     if normalized_query != query:
@@ -300,6 +309,21 @@ async def route_query(query: str) -> str:
         if route_name in TOP_LEVEL_CATEGORIES:
             return route_name
         elif route_name in ERP_ROUTE_NAMES:
-            return f"ERP_ROUTE:{route_name}"
+            allowed_erp_routes = {
+                "erp_tickets_create",
+                "erp_feedback_create",
+                "erp_suggestion_create",
+                "lost_found_create",
+                "food_log_list",
+                "pr_leave_tracker",
+                "lost_found_list",
+                "track_request"
+            }
+            if route_name in allowed_erp_routes:
+                return f"ERP_ROUTE:{route_name}"
+            else:
+                logger.info(f"[Router] Intercepting disallowed ERP route {route_name} for query {query!r} -> Forcing RAG")
+                return "RAG"
 
     return "QWEN"
+
