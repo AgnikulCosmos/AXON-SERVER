@@ -35,6 +35,8 @@ from orchestrator.agent import (
 
 logger = logging.getLogger("api")
 
+from common.llm.ollama_helper import get_working_ollama_base_url
+
 def get_ollama_url() -> str:
     return get_working_ollama_base_url()
 
@@ -47,9 +49,8 @@ async def _wait_for_ollama(retries: int = 12, delay: float = 5.0) -> bool:
             async with ollama.AsyncClient(host=get_ollama_url()) as client:
                 await client.list()
             return True
-        except Exception:
-            pass
-        logger.warning(f"Ollama not ready (attempt {attempt}/{retries}), retrying in {delay}s...")
+        except Exception as e:
+            logger.warning(f"Ollama not ready (attempt {attempt}/{retries}) - error: {e}")
         await asyncio.sleep(delay)
     return False
 
