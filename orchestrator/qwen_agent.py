@@ -20,7 +20,9 @@ qwen_llm = ChatOllama(
     model=LLM_MODEL,
     base_url=get_working_ollama_base_url(),
     temperature=0.2,
-    streaming=True
+    streaming=True,
+    request_timeout=60,
+    num_predict=300,
 )
 
 
