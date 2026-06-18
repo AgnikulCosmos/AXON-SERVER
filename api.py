@@ -151,6 +151,7 @@ class TitleGenerationRequest(BaseModel):
     last_title_message_count: int = 0
     force: bool = False
     timeout: Optional[int] = DEFAULT_TIMEOUT
+    session_id: Optional[str] = None
 
 def frappe_headers_from_request(request: Request) -> dict:
     forwarded = {}
