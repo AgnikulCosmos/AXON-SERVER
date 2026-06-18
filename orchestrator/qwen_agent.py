@@ -90,28 +90,26 @@ async def summarize_tool_output(
         summary = tool_data.get("summary") or tool_data.get("extract") or ""
         url = tool_data.get("url") or ""
         title = tool_data.get("title") or "Wikipedia"
-        formatted_data = f"### {title}\n\n{summary}"
         if url:
-            formatted_data += f"\n\nSource: [Wikipedia]({url})"
-        
+            formatted_data = f"[{title}]({url})\n\n{summary}"
+        else:
+            formatted_data = f"{title}\n\n{summary}"
         await stream_text_word_by_word(formatted_data)
         return formatted_data
 
     if tool_name == "ddgs" and isinstance(tool_data, dict):
         results = tool_data.get("results", [])
-        lines = []
-        for i, res in enumerate(results[:3], start=1):
-            title = res.get("title", "Search Result").strip()
-            title = re.sub(r'[\[\]]', '', title)  # clean brackets
+        if results:
+            res = results[0]
+            title = re.sub(r'[\[\]]', '', res.get("title", "Search Result").strip())
             snippet = res.get("body", "No description available.").strip()
             url = res.get("href", "")
-            if url and not url.endswith("#duckduckgo"):
-                url += "#duckduckgo"
-            lines.append(f"{i}. [{title}]({url})\n{snippet}")
-        formatted_data = "\n\n".join(lines)
-        if not formatted_data:
+            if url:
+                formatted_data = f"[{title}]({url})\n\n{snippet}"
+            else:
+                formatted_data = f"{title}\n\n{snippet}"
+        else:
             formatted_data = "No search results found."
-        
         await stream_text_word_by_word(formatted_data)
         return formatted_data
 

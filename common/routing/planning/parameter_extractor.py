@@ -18,21 +18,13 @@ import os
 import re
 import asyncio
 import logging
-from langchain_ollama import ChatOllama
+import httpx
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 from common.llm.ollama_helper import get_working_ollama_base_url
 OLLAMA_URL = get_working_ollama_base_url()
-
-# ── LLM for parameter extraction ────────────────────────────────────────────
-_extractor_llm = ChatOllama(
-    model=os.getenv("LLM_MODEL", "qwen3.5:0.8b"),
-    base_url=OLLAMA_URL,
-    temperature=0,
-    streaming=False,
-)
 
 from prompts.routing import PARAMETER_EXTRACTION_PROMPT
 _EXTRACT_PROMPT = PARAMETER_EXTRACTION_PROMPT
@@ -256,19 +248,49 @@ def extract_parameters(query: str, route_config: dict) -> dict:
 # ═════════════════════════════════════════════════════════════════════════════
 
 def _llm_extract(query: str, schema: dict) -> dict:
-    """Call LLM to extract parameters."""
+    """Call LLM to extract parameters using completion endpoint with template override."""
     prompt = _EXTRACT_PROMPT.format(
         schema=json.dumps(schema, indent=2),
         query=query,
     )
-    resp = _extractor_llm.invoke(prompt)
-    text = resp.content.strip()
-
-    # Parse the JSON from the response
-    match = re.search(r"\{.*\}", text, re.S)
-    if not match:
+    
+    try:
+        # Strict timeout of 8.0 seconds to prevent 504 Gateway Timeout
+        with httpx.Client(timeout=8.0) as client:
+            resp = client.post(
+                f"{OLLAMA_URL}/api/generate",
+                json={
+                    "model": os.getenv("LLM_MODEL", "qwen3.5:0.8b"),
+                    "prompt": prompt,
+                    "template": "{{ .Prompt }}",
+                    "stream": False,
+                    "options": {"temperature": 0.0, "num_predict": 100},
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            
+            response_text = data.get("response", "") or ""
+            thinking_text = data.get("thinking", "") or ""
+            
+            raw_json = ""
+            if thinking_text:
+                if "<think>" in thinking_text:
+                    raw_json = thinking_text.split("<think>")[0].strip()
+                else:
+                    raw_json = thinking_text.strip()
+            
+            if not raw_json:
+                raw_json = response_text.strip()
+                
+            # Parse the JSON from the response
+            match = re.search(r"\{.*\}", raw_json, re.S)
+            if not match:
+                return {}
+            return json.loads(match.group())
+    except Exception as e:
+        logger.warning("LLM parameter extraction HTTP call failed or timed out: %s", e)
         return {}
-    return json.loads(match.group())
 
 
 # ── Task 4: Extended temporal keywords for fallback ─────────────────────────
