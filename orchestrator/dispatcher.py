@@ -595,7 +595,8 @@ async def _run_agent(query: str, session_id: str | None = None):
                     k: v for k, v in route_config.get("parameters", {}).items()
                     if k in missing_fields
                 }
-                new_params = extract_parameters(query, temp_config)
+                import asyncio as _asyncio
+                new_params = await _asyncio.to_thread(extract_parameters, query, temp_config)
                 if new_params:
                     has_extracted_params = True
 
@@ -683,7 +684,8 @@ async def _run_agent(query: str, session_id: str | None = None):
         plan = None
         if route and route.startswith("ERP_ROUTE:"):
             route_name = route.split(":", 1)[1]
-            plan = _build_erp_plan(route_name, query)
+            import asyncio as _asyncio
+            plan = await _asyncio.to_thread(_build_erp_plan, route_name, query)
 
     # -------------------------
     # TEST MODE

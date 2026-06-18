@@ -236,6 +236,14 @@ async def route_query(query: str) -> str:
         logger.info(f"[Router] Forcing TOOLS for public space query: {query!r}")
         return "TOOLS"
 
+    # Force RAG for any query that contains an Agnikul-specific entity or domain term.
+    # This ensures questions like "What about Dhanush?" are answered from the knowledge base.
+    from common.constants import RAG_TERMS
+    q_words = set(re.findall(r'\b[a-z]+\b', q_lower))
+    if q_words & RAG_TERMS:
+        logger.info(f"[Router] Forcing RAG for Agnikul-domain query: {query!r}")
+        return "RAG"
+
     # Normalize query — fix domain-specific typos before embedding lookup
     normalized_query = _normalize_query(query)
     if normalized_query != query:

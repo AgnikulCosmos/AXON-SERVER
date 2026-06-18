@@ -370,7 +370,23 @@ async def generate_title_endpoint(req: TitleGenerationRequest):
         if not raw_title:
             raw_title = response_text.strip()
 
-        title = raw_title.strip().strip("\"'").strip()
+        # Take only the first non-empty line
+        first_line = ""
+        for line in raw_title.splitlines():
+            line = line.strip()
+            if line:
+                first_line = line
+                break
+        raw_title = first_line or raw_title
+
+        # Strip model special tokens that leak into output
+        import re as _re
+        raw_title = _re.sub(r'<\|[^|>]+\|>', '', raw_title)
+        raw_title = _re.sub(r'<\[[^\]]+\]>', '', raw_title)
+        raw_title = _re.sub(r'</?think>', '', raw_title)
+        raw_title = _re.sub(r'\s+', ' ', raw_title).strip()
+
+        title = raw_title.strip("\"'").strip()
 
         if len(title) > 60:
             title = title[:57] + "..."
