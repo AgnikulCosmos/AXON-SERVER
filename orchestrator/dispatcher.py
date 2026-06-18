@@ -823,22 +823,10 @@ async def _run_agent(query: str, session_id: str | None = None):
         return result_str
 
     if route == "QWEN":
-        # Fallback to ddgs search instead of direct QWEN generation
-        tool_name, tool_result = await dispatch_tool(f"/ddgs {query}")
-
-        sys.stdout.write(f"{MARKER_FINAL_START}\n")
-        sys.stdout.flush()
-
-        result = await summarize_tool_output(
-            user_query=query,
-            tool_name=tool_name,
-            tool_data=tool_result
-        )
-        result = await sanitize_or_block_response(result)
-
-        sys.stdout.write(f"{MARKER_FINAL_END}\n")
-        sys.stdout.flush()
-        return result
+        # Direct LLM answer — no external search for general knowledge queries.
+        # run_axon handles MARKER_FINAL_START/END internally.
+        res = await run_axon(query)
+        return await sanitize_or_block_response(res)
 
     if route == "TOOLS":
         tool_name, tool_result = await dispatch_tool(query)
