@@ -62,27 +62,9 @@ ERP Data:
 Return only the final answer in natural language.
 """
 
-TITLE_GENERATION_PROMPT = """You are a session title generator.
+TITLE_GENERATION_PROMPT = """Write a short 3-word title for the following conversation.
 
-Task:
-Analyze the conversation segment below and determine the dominant topic or primary user intent.
-
-Title Requirements:
-- Length: 4–8 words only
-- Must clearly reflect the core topic or objective
-- Be specific, not vague
-- Avoid generic phrases such as "General Discussion", "Chat", or "Help"
-- Do not include emojis, quotation marks, special characters, or trailing punctuation
-- Use domain-relevant terminology where applicable
-- Prefer noun phrases over full sentences
-- Do not invent topics not present in the conversation
-
-Conversation Segment:
+Conversation:
 {conversation_summary}
 
-Output Rules:
-- Return ONLY the title
-- No explanations
-- No formatting
-- No additional text
-"""
+Title:"""

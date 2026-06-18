@@ -342,21 +342,34 @@ async def generate_title_endpoint(req: TitleGenerationRequest):
         return fallback or "New Chat"
 
     try:
-        # Limit generation to 30 seconds max on CPU, and restrict token output to 20 tokens
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        # Use completion endpoint with template override to bypass thinking process and generate instantly
+        async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(
-                f"{OLLAMA_BASE_URL}/api/chat",
+                f"{OLLAMA_BASE_URL}/api/generate",
                 json={
                     "model": TITLE_MODEL,
-                    "messages": [{"role": "user", "content": prompt}],
+                    "prompt": prompt,
+                    "template": "{{ .Prompt }}",
                     "stream": False,
-                    "options": {"temperature": 0.2, "num_predict": 20},
+                    "options": {"temperature": 0.0, "num_predict": 30},
                 },
             )
             resp.raise_for_status()
             data = resp.json()
 
-        raw_title = (data.get("message", {}).get("content", "") or "").strip()
+        response_text = data.get("response", "") or ""
+        thinking_text = data.get("thinking", "") or ""
+        
+        raw_title = ""
+        if thinking_text:
+            if "<think>" in thinking_text:
+                raw_title = thinking_text.split("<think>")[0].strip()
+            else:
+                raw_title = thinking_text.strip()
+        
+        if not raw_title:
+            raw_title = response_text.strip()
+
         title = raw_title.strip().strip("\"'").strip()
 
         if len(title) > 60:
