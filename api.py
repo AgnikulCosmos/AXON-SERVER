@@ -35,15 +35,16 @@ from orchestrator.agent import (
 
 logger = logging.getLogger("api")
 
-from common.llm.ollama_helper import get_working_ollama_base_url
-OLLAMA_BASE_URL = get_working_ollama_base_url()
+def get_ollama_url() -> str:
+    return get_working_ollama_base_url()
+
 TITLE_MODEL = os.getenv("LLM_MODEL", "qwen3.5:0.8b")
 
 
 async def _wait_for_ollama(retries: int = 12, delay: float = 5.0) -> bool:
     for attempt in range(1, retries + 1):
         try:
-            async with ollama.AsyncClient(host=OLLAMA_BASE_URL) as client:
+            async with ollama.AsyncClient(host=get_ollama_url()) as client:
                 await client.list()
             return True
         except Exception:
@@ -57,7 +58,7 @@ async def _pull_model(model: str, retries: int = 3) -> bool:
     for attempt in range(1, retries + 1):
         try:
             logger.info(f"Pulling model '{model}' (attempt {attempt}/{retries})...")
-            async with ollama.AsyncClient(host=OLLAMA_BASE_URL) as client:
+            async with ollama.AsyncClient(host=get_ollama_url()) as client:
                 await client.pull(model)
             return True
         except Exception as e:
@@ -69,7 +70,7 @@ async def _pull_model(model: str, retries: int = 3) -> bool:
 
 async def _verify_model(model: str) -> bool:
     try:
-        async with ollama.AsyncClient(host=OLLAMA_BASE_URL) as client:
+        async with ollama.AsyncClient(host=get_ollama_url()) as client:
             await client.chat(model=model, messages=[{"role": "user", "content": "ping"}])
         return True
     except Exception:
@@ -232,7 +233,7 @@ async def _call_ollama(prompt: str, max_tokens: int = 30) -> str:
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
+                f"{get_ollama_url()}/api/generate",
                 json={
                     "model": TITLE_MODEL,
                     "prompt": prompt,
@@ -582,7 +583,7 @@ async def health():
     ollama_status = "unknown"
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
+            resp = await client.get(f"{get_ollama_url()}/api/tags")
             if resp.status_code == 200:
                 ollama_status = "ok"
                 # Map models to a simpler list of names for readability
