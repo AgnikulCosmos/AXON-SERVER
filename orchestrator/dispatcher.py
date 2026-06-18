@@ -357,12 +357,24 @@ async def contextualize_query_with_history(query: str, session_id: str | None) -
         from prompts.rag import CONTEXTUALIZER_PROMPT
         prompt = CONTEXTUALIZER_PROMPT.format(history_str=history_str, query=query)
 
-        from orchestrator.qwen_agent import qwen_llm
-        resp = await qwen_llm.ainvoke(prompt)
-        rewritten = resp.content.strip().strip("\"'")
-        if rewritten:
-            logger.info(f"[Query Contextualizer] Original: {query!r} -> Rewritten: {rewritten!r}")
-            return rewritten
+        import ollama
+        from common.llm.ollama_helper import get_working_ollama_base_url
+        model = os.getenv("LLM_MODEL", "qwen3.5:0.8b")
+        async with ollama.AsyncClient(host=get_working_ollama_base_url()) as client:
+            resp = await client.generate(
+                model=model,
+                prompt=prompt,
+                options={"temperature": 0.0, "num_predict": 120}
+            )
+            if hasattr(resp, "response"):
+                rewritten = resp.response.strip().strip("\"'")
+            elif isinstance(resp, dict):
+                rewritten = resp.get("response", "").strip().strip("\"'")
+            else:
+                rewritten = str(resp).strip().strip("\"'")
+            if rewritten:
+                logger.info(f"[Query Contextualizer] Original: {query!r} -> Rewritten: {rewritten!r}")
+                return rewritten
 
     except Exception as err:
         logger.warning(f"Failed to contextualize query: {err}")
@@ -370,8 +382,65 @@ async def contextualize_query_with_history(query: str, session_id: str | None) -
     return query
 
 
+def is_relationship_query(query: str) -> bool:
+    q = query.lower().strip()
+    relationship_patterns = [
+        r"\b(gf|bf|girlfriend|boyfriend|husband|wife|spouse|partner|marry|marriage|dating|date|relationship|love|lover|single)\b",
+    ]
+    for pattern in relationship_patterns:
+        if re.search(pattern, q):
+            if "date" in q:
+                exclude_terms = ["of birth", "effective", "leave", "food", "booking", "policy", "card", "ticket", "start", "end", "today", "yesterday", "tomorrow", "from", "to", "current", "release", "launch"]
+                if any(ext in q for ext in exclude_terms):
+                    continue
+            return True
+    return False
+
+
 async def _run_agent(query: str, session_id: str | None = None):
     temp_q = query.lower().strip("!?., ")
+
+    # Automated Flagging Middleware
+    if session_id:
+        from common.routing.safety import contains_profanity
+        is_profane = contains_profanity(query)
+        is_rel = is_relationship_query(query)
+        
+        if is_profane or is_rel:
+            flag_type = "Profanity" if is_profane else "Relationship Query"
+            try:
+                from services.erp.frappe_client import call_frappe
+                await call_frappe({
+                    "tool": "axon.api.flag_message",
+                    "http_method": "POST",
+                    "arguments": {
+                        "session_id": session_id,
+                        "flag_type": flag_type,
+                        "reason": query
+                    }
+                })
+                logger.info(f"[Automated Flagging] Flagged query: {query!r} as {flag_type}")
+            except Exception as e:
+                logger.warning(f"Failed to automatically flag message: {e}")
+
+    # Block relationship queries early
+    if is_relationship_query(query):
+        rel_response = "I am an AI assistant here to help you with Agnikul's ERP and workplace queries. I cannot participate in personal or relationship discussions."
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(rel_response)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return rel_response
+
+    # Block profanity early
+    from common.routing.safety import contains_profanity
+    if contains_profanity(query):
+        profanity_response = "I am an AI assistant here to help you with Agnikul's ERP and workplace queries. Please refrain from using inappropriate language."
+        sys.stdout.write(f"{MARKER_FINAL_START}\n")
+        await stream_text_word_by_word(profanity_response)
+        sys.stdout.write(f"{MARKER_FINAL_END}\n")
+        sys.stdout.flush()
+        return profanity_response
 
     # 1. Unrelated Queries Filter
     if is_unrelated_query(query):

@@ -69,7 +69,12 @@ async def _confirm_route_with_llm(query: str, route_desc: str) -> bool:
                 prompt=prompt,
                 options={"temperature": 0.0, "num_predict": 120}
             )
-            ans = resp.get("response", "").strip()
+            if hasattr(resp, "response"):
+                ans = resp.response.strip()
+            elif isinstance(resp, dict):
+                ans = resp.get("response", "").strip()
+            else:
+                ans = str(resp).strip()
             ans = re.sub(r'[^0-9]', '', ans)
             logger.info(f"[LLM CONFIRMATION] Query: {query!r} | Desc: {route_desc!r} | Ans: {ans!r}")
             if "1" in ans:
@@ -150,7 +155,12 @@ async def _disambiguate_route_with_llm(query: str, route_name: str) -> str:
                 prompt=prompt,
                 options={"temperature": 0.0, "num_predict": 120}
             )
-            ans = resp.get("response", "").strip().lower()
+            if hasattr(resp, "response"):
+                ans = resp.response.strip().lower()
+            elif isinstance(resp, dict):
+                ans = resp.get("response", "").strip().lower()
+            else:
+                ans = str(resp).strip().lower()
             ans = re.sub(r'[^a-z]', '', ans)
             logger.info(f"[LLM DISAMBIGUATION] Query: {query!r} | Category: {category} | Ans: {ans!r}")
             if ans in options:
@@ -210,6 +220,21 @@ async def route_query(query: str) -> str:
 
     if is_greeting(query):
         return f"GREETING_RESPONSE:{get_greeting_response()}"
+
+    # Forcing TOOLS for public/country-specific space queries early
+    q_lower = query.lower().strip("!?.,'")
+    public_entities = {
+        "india", "isro", "spacex", "nasa", "china", "russia", "esa", "blue origin",
+        "rocket lab", "jaxa", "roscosmos", "cnsa", "united states", "japan", "france", "uk"
+    }
+    space_stems = {"rocket", "rockte", "launch", "satellite", "mission", "engine", "booster"}
+    
+    has_public = any(re.search(r'\b' + re.escape(entity) + r'\b', q_lower) for entity in public_entities)
+    has_space = any(stem in q_lower for stem in space_stems)
+    
+    if has_public and has_space:
+        logger.info(f"[Router] Forcing TOOLS for public space query: {query!r}")
+        return "TOOLS"
 
     # Normalize query — fix domain-specific typos before embedding lookup
     normalized_query = _normalize_query(query)

@@ -163,7 +163,12 @@ Tool:"""
                 prompt=prompt,
                 options={"temperature": 0.0, "num_predict": 10}
             )
-            ans = resp.get("response", "").strip().lower()
+            if hasattr(resp, "response"):
+                ans = resp.response.strip().lower()
+            elif isinstance(resp, dict):
+                ans = resp.get("response", "").strip().lower()
+            else:
+                ans = str(resp).strip().lower()
             # Clean up the output in case the model added quotes or whitespace
             ans = re.sub(r'[^a-z]', '', ans)
             if ans in ["wiki", "arxiv", "ddgs"]:
