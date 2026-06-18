@@ -236,11 +236,16 @@ async def route_query(query: str) -> str:
         logger.info(f"[Router] Forcing TOOLS for public space query: {query!r}")
         return "TOOLS"
 
-    # Force RAG for any query that contains an Agnikul-specific entity or domain term.
-    # This ensures questions like "What about Dhanush?" are answered from the knowledge base.
-    from common.constants import RAG_TERMS
-    q_words = set(re.findall(r'\b[a-z]+\b', q_lower))
-    if q_words & RAG_TERMS:
+    # Force RAG for any query that contains an Agnikul-specific proprietary entity or domain term.
+    # This ensures questions like "What about Dhanush?" or "Who is Moin?" are answered from the knowledge base,
+    # while leaving general ERP queries (like leaves, tickets, etc.) to the semantic router.
+    PROPRIETARY_RAG_TERMS = {
+        "dhanush", "agnibaan", "agnilet", "cosmos", "agnikul", "sorted",
+        "srinath", "moin", "satyanarayanan", "janardhana", "ravichandran", "spm", "raju", "chakravarthy",
+        "founder", "co-founder", "cofounder", "ceo", "coo"
+    }
+    q_words = set(re.findall(r'\b[a-z0-9-]+\b', q_lower))
+    if q_words & PROPRIETARY_RAG_TERMS:
         logger.info(f"[Router] Forcing RAG for Agnikul-domain query: {query!r}")
         return "RAG"
 

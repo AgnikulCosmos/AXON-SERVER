@@ -28,6 +28,45 @@ OLLAMA_URL = get_working_ollama_base_url()
 
 from prompts.routing import PARAMETER_EXTRACTION_PROMPT
 _EXTRACT_PROMPT = PARAMETER_EXTRACTION_PROMPT
+
+def _is_generic_or_filler(value: str) -> bool:
+    val_clean = value.strip().lower().strip("!?.,'")
+    
+    # Enforce minimum length of 4 characters
+    if len(val_clean) < 4:
+        return True
+        
+    GENERIC_HELPERS = {
+        "i need to", "i want to", "please", "can you", "could you", "would you",
+        "help me to", "i need", "i want", "need to", "want to", "to", "i", "need", "want",
+        "please create", "please raise", "create", "raise", "report", "submit",
+        "create support ticket", "raise support ticket", "raise a ticket", "lodge a ticket",
+        "create a ticket", "open a support request", "lodge a support ticket", "support ticket",
+        "ticket", "i need to create a ticket", "i need to create a support ticket",
+        "i want to raise a ticket", "i want to raise a support ticket", "create support ticket",
+        "create a support ticket", "raise a support ticket", "open a support ticket",
+        "i need to raise a ticket", "raise a support request", "create a support request",
+        "submit feedback", "give feedback", "write feedback", "rate an application",
+        "create erp support feedback", "submit a review", "submit a feedback", "give a feedback",
+        "feedback", "suggestion", "create suggestion", "submit suggestion", "give suggestion",
+        "canteen feedback", "canteen suggestion", "food feedback", "food suggestion",
+        "feedback suggestions", "suggestions", "feedbacks"
+    }
+    if val_clean in GENERIC_HELPERS:
+        return True
+
+    # Check if value consists entirely of non-descriptive filler words
+    FILLER_WORDS = {
+        "i", "me", "my", "to", "a", "an", "the", "for", "please", "need", "want", "create", "raise",
+        "report", "submit", "ticket", "issue", "bug", "support", "help", "can", "you", "could", "would",
+        "some", "any", "feedback", "suggestion", "suggestions", "feedbacks", "about", "with", "this", "that"
+    }
+    words = re.findall(r'\b[a-z]+\b', val_clean)
+    if words and all(w in FILLER_WORDS for w in words):
+        return True
+        
+    return False
+
 # Cache holder for valid app names from Frappe
 _VALID_APP_NAMES_CACHE = None
 
@@ -187,35 +226,20 @@ def extract_parameters(query: str, route_config: dict) -> dict:
                 del extracted_params["app_name"]
 
     if "description" in extracted_params:
-        desc_val = str(extracted_params["description"]).strip().lower().strip("!?.,'")
-        generic_triggers = {
-            "create support ticket", "raise support ticket", "raise a ticket", "lodge a ticket",
-            "create a ticket", "open a support request", "lodge a support ticket", "support ticket",
-            "ticket", "i need to create a ticket", "i need to create a support ticket",
-            "i want to raise a ticket", "i want to raise a support ticket", "create support ticket",
-            "create a support ticket", "raise a support ticket", "open a support ticket",
-            "i need to raise a ticket", "raise a support request", "create a support request"
-        }
-        if desc_val in generic_triggers:
-            logger.info(f"Discarding generic description: {desc_val}")
+        if _is_generic_or_filler(str(extracted_params["description"])):
+            logger.info(f"Discarding generic/helper description: {extracted_params['description']}")
             del extracted_params["description"]
 
     if "feedback" in extracted_params:
-        feed_val = str(extracted_params["feedback"]).strip().lower().strip("!?.,'")
-        generic_feedback_triggers = {
-            "submit feedback", "give feedback", "write feedback", "rate an application",
-            "create erp support feedback", "submit a review", "submit a feedback", "give a feedback",
-            "feedback", "suggestion", "create suggestion", "submit suggestion", "give suggestion",
-            "canteen feedback", "canteen suggestion", "food feedback", "food suggestion",
-            "feedback suggestions", "suggestions", "feedbacks"
-        }
-        is_generic = feed_val in generic_feedback_triggers
+        feed_val = str(extracted_params["feedback"])
+        is_generic = _is_generic_or_filler(feed_val)
         
         # Discard if it is just specifying the app name, e.g. "for fleet management" or "fleet management"
         app_name_val = extracted_params.get("app_name")
         if app_name_val:
             app_name_lower = str(app_name_val).lower()
-            if feed_val == f"for {app_name_lower}" or feed_val == app_name_lower:
+            feed_val_clean = feed_val.strip().lower().strip("!?.,'")
+            if feed_val_clean == f"for {app_name_lower}" or feed_val_clean == app_name_lower:
                 is_generic = True
                 
         if is_generic:
