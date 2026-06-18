@@ -98,11 +98,9 @@ async def summarize_tool_output(
         summary = tool_data.get("summary") or tool_data.get("extract") or ""
         url     = tool_data.get("url") or ""
 
-        # Trim to first 6-7 sentences to keep it concise
-        sentences = [s.strip() for s in summary.split(". ") if s.strip()]
-        trimmed   = ". ".join(sentences[:7])
-        if trimmed and not trimmed.endswith("."):
-            trimmed += "."
+        # Split into paragraphs and keep up to 3 to get a rich summary
+        paragraphs = [p.strip() for p in summary.split("\n") if p.strip()]
+        trimmed = "\n\n".join(paragraphs[:3])
 
         # Stream the summary word by word
         await stream_text_word_by_word(trimmed)
