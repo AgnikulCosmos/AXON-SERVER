@@ -93,85 +93,62 @@ async def summarize_tool_output(
         await stream_text_word_by_word(formatted_data)
         return formatted_data
 
-    # Determine length instruction and format data for LLM
-    length_instruction = ""
-    tool_data_for_llm = tool_data
-
-    if tool_name == "ddgs" and isinstance(tool_data, dict):
-        # Check if the query is a technical/space topic
-        space_stems = {"rocket", "propulsion", "engine", "launch", "space", "satellite", "mission", "booster"}
-        q_lower = user_query.lower()
-        is_space_query = any(stem in q_lower for stem in space_stems)
-        if is_space_query:
-            length_instruction = "Your response (excluding links) MUST be exactly 6-7 lines long."
-        else:
-            length_instruction = "Your response (excluding links) MUST be exactly a single sentence on a single line (one line only)."
-        
-        results = tool_data.get("results", [])
-        formatted_results = []
-        for r in results[:4]:
-            r_title = r.get("title", "Search Result")
-            r_url = r.get("href", "")
-            r_snippet = r.get("body", "")
-            formatted_results.append(f"- Title: {r_title}\n  URL: {r_url}\n  Snippet: {r_snippet}")
-        tool_data_for_llm = "\n\n".join(formatted_results)
-
-    elif tool_name == "wiki" and isinstance(tool_data, dict):
-        length_instruction = "Your response (excluding links) MUST be exactly 3-4 lines long."
-        title = tool_data.get("title") or "Wikipedia"
+    if tool_name == "wiki" and isinstance(tool_data, dict):
+        title   = tool_data.get("title") or "Wikipedia"
         summary = tool_data.get("summary") or tool_data.get("extract") or ""
-        url = tool_data.get("url") or ""
-        tool_data_for_llm = f"Source: {title} ({url})\nContent: {summary}"
+        url     = tool_data.get("url") or ""
 
-    prompt = SUMMARIZE_TOOL_OUTPUT_PROMPT.format(
-        length_instruction=length_instruction,
-        user_query=user_query,
-        tool_data=tool_data_for_llm
-    )
+        # Trim to first 6-7 sentences to keep it concise
+        sentences = [s.strip() for s in summary.split(". ") if s.strip()]
+        trimmed   = ". ".join(sentences[:7])
+        if trimmed and not trimmed.endswith("."):
+            trimmed += "."
 
-    messages = [
-        SystemMessage(content=AXON_IDENTITY_PROMPT),
-        HumanMessage(content=prompt),
-    ]
+        # Stream the summary word by word
+        await stream_text_word_by_word(trimmed)
 
-    cleaner = StreamingCleaner()
-    full_content = []
-    async for chunk in qwen_llm.astream(messages):
-        content = chunk.content
-        processed = cleaner.process_chunk(content)
-        if processed:
-            sys.stdout.write(processed.replace("\n", "<br/>"))
+        # Append source link
+        if url:
+            source_line = f"\n\nSources: [{title}]({url})"
+            sys.stdout.write("\n" + source_line.replace("\n", "<br/>") + "\n")
             sys.stdout.flush()
-            full_content.append(processed)
+            return trimmed + source_line
 
-    final_processed = cleaner.finalize()
-    if final_processed:
-        sys.stdout.write(final_processed.replace("\n", "<br/>"))
-        sys.stdout.flush()
-        full_content.append(final_processed)
+        return trimmed
 
-    response_str = "".join(full_content)
     if tool_name == "ddgs" and isinstance(tool_data, dict):
         results = tool_data.get("results", [])
-        sources = []
-        for res in results[:3]:
-            title = res.get("title", "Source").strip()
-            title = re.sub(r'[\[\]]', '', title)  # clean brackets
-            url = res.get("href")
-            if url:
-                sources.append(f"[{title}]({url})")
-        if sources:
-            sources_str = "\n\n**Sources:** " + " | ".join(sources)
-            sys.stdout.write("\n" + sources_str.replace("\n", "<br/>") + "\n")
-            sys.stdout.flush()
-            response_str += sources_str
-    elif tool_name == "wiki" and isinstance(tool_data, dict):
-        url = tool_data.get("url")
-        title = tool_data.get("title") or "Wikipedia"
-        if url:
-            sources_str = f"\n\n**Sources:** [{title}]({url})"
-            sys.stdout.write("\n" + sources_str.replace("\n", "<br/>") + "\n")
-            sys.stdout.flush()
-            response_str += sources_str
 
-    return response_str
+        # Build body text: title + snippet for top 3 results
+        lines = []
+        source_links = []
+        for res in results[:3]:
+            r_title   = res.get("title", "Result").strip()
+            r_snippet = res.get("body", "").strip()
+            r_url     = res.get("href", "")
+
+            if r_snippet:
+                lines.append(f"{r_title}: {r_snippet}")
+            if r_url:
+                clean_title = re.sub(r'[\[\]]', '', r_title)
+                source_links.append(f"[{clean_title}]({r_url})")
+
+        body = "\n\n".join(lines)
+
+        # Stream body word by word
+        await stream_text_word_by_word(body)
+
+        # Append source links
+        if source_links:
+            sources_str = "\n\nSources: " + " | ".join(source_links)
+            sys.stdout.write("\n" + sources_str.replace("\n", "<br/>") + "\n")
+            sys.stdout.flush()
+            return body + sources_str
+
+        return body
+
+    # Fallback — stream raw string
+    raw = str(tool_data)
+    await stream_text_word_by_word(raw)
+    return raw
+
