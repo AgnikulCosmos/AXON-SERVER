@@ -223,15 +223,36 @@ async def route_query(query: str) -> str:
 
     # Forcing TOOLS for public/country-specific space queries early
     q_lower = query.lower().strip("!?.,'")
+
+    # ── Agnikul rocket/launch shortcut — must run BEFORE the public-entity TOOLS check.
+    # Queries like "How many rockets they have launched" contain no explicit Agnikul name
+    # but clearly refer to Agnikul context, so match them to RAG directly.
+    AGNIKUL_ROCKET_CONTEXT = {
+        "how many", "how much", "their", "they", "agnikul", "agnibaan", "agnilet",
+        "agnite", "launchpad", "sorted", "mission", "private", "india", "dhanush",
+        "first", "when", "where", "what"
+    }
+    rocket_stems = {"rocket", "rockets", "launch", "launched", "launches", "launching"}
+    q_words_early = set(re.findall(r'\b[a-z0-9]+\b', q_lower))
+    has_rocket = any(stem in q_lower for stem in rocket_stems)
+    has_agnikul_context = bool(q_words_early & AGNIKUL_ROCKET_CONTEXT)
+    # If query mentions rocket/launch AND has any Agnikul-context word, answer from RAG.
+    # Exclude queries that ALSO mention a well-known foreign space agency/country (those go to TOOLS).
+    foreign_agencies = {"spacex", "nasa", "isro", "esa", "jaxa", "roscosmos", "cnsa", "blue origin", "rocket lab"}
+    has_foreign = bool(q_words_early & foreign_agencies)
+    if has_rocket and has_agnikul_context and not has_foreign:
+        logger.info(f"[Router] Forcing RAG for Agnikul rocket/launch query: {query!r}")
+        return "RAG"
+
     public_entities = {
-        "india", "isro", "spacex", "nasa", "china", "russia", "esa", "blue origin",
+        "isro", "spacex", "nasa", "china", "russia", "esa", "blue origin",
         "rocket lab", "jaxa", "roscosmos", "cnsa", "united states", "japan", "france", "uk"
     }
     space_stems = {"rocket", "rockte", "launch", "satellite", "mission", "engine", "booster"}
-    
+
     has_public = any(re.search(r'\b' + re.escape(entity) + r'\b', q_lower) for entity in public_entities)
     has_space = any(stem in q_lower for stem in space_stems)
-    
+
     if has_public and has_space:
         logger.info(f"[Router] Forcing TOOLS for public space query: {query!r}")
         return "TOOLS"
@@ -240,9 +261,10 @@ async def route_query(query: str) -> str:
     # This ensures questions like "What about Dhanush?" or "Who is Moin?" are answered from the knowledge base,
     # while leaving general ERP queries (like leaves, tickets, etc.) to the semantic router.
     PROPRIETARY_RAG_TERMS = {
-        "dhanush", "agnibaan", "agnilet", "cosmos", "agnikul", "sorted",
+        "dhanush", "agnibaan", "agnilet", "agnite", "cosmos", "agnikul", "sorted",
         "srinath", "moin", "satyanarayanan", "janardhana", "ravichandran", "spm", "raju", "chakravarthy",
-        "founder", "co-founder", "cofounder", "ceo", "coo"
+        "founder", "co-founder", "cofounder", "ceo", "coo",
+        "launchpad", "agnilet", "mission-01", "sdsc", "shar"
     }
     q_words = set(re.findall(r'\b[a-z0-9-]+\b', q_lower))
     if q_words & PROPRIETARY_RAG_TERMS:
