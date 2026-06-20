@@ -825,10 +825,47 @@ async def _run_agent(query: str, session_id: str | None = None):
         return result_str
 
     if route == "QWEN":
-        # Direct LLM answer — no external search for general knowledge queries.
-        # run_axon handles MARKER_FINAL_START/END internally.
-        res = await run_axon(query)
-        return await sanitize_or_block_response(res)
+        # Direct LLM answer with a timeout guard.
+        # If the LLM takes too long (e.g. "Explain liquid engine"), fall back to Wikipedia.
+        # Wikipedia itself falls back to DDGS if it can't find the page (see tool_dispatcher.py).
+        import asyncio as _asyncio
+        QWEN_TIMEOUT_SECONDS = 20
+
+        try:
+            res = await _asyncio.wait_for(run_axon(query), timeout=QWEN_TIMEOUT_SECONDS)
+            return await sanitize_or_block_response(res)
+
+        except (_asyncio.TimeoutError, Exception) as _qwen_err:
+            logger.warning(
+                f"[QWEN] run_axon {'timed out' if isinstance(_qwen_err, _asyncio.TimeoutError) else 'failed'} "
+                f"for query {query!r}. Falling back to Wikipedia. Error: {_qwen_err}"
+            )
+            # Fallback: search Wikipedia (tool_dispatcher will use DDGS if Wikipedia fails)
+            try:
+                _tool_name, _tool_result = await dispatch_tool(f"/wiki {query}")
+
+                sys.stdout.write(f"{MARKER_FINAL_START}\n")
+                sys.stdout.flush()
+
+                _result = await summarize_tool_output(
+                    user_query=query,
+                    tool_name=_tool_name,
+                    tool_data=_tool_result
+                )
+                _result = await sanitize_or_block_response(_result)
+
+                sys.stdout.write(f"{MARKER_FINAL_END}\n")
+                sys.stdout.flush()
+                return _result
+
+            except Exception as _wiki_err:
+                logger.error(f"[QWEN] Wikipedia fallback also failed: {_wiki_err}")
+                _fallback_msg = "I'm having trouble answering that right now. Please try rephrasing or try again shortly."
+                sys.stdout.write(f"{MARKER_FINAL_START}\n")
+                await stream_text_word_by_word(_fallback_msg)
+                sys.stdout.write(f"{MARKER_FINAL_END}\n")
+                sys.stdout.flush()
+                return _fallback_msg
 
     if route == "TOOLS":
         tool_name, tool_result = await dispatch_tool(query)
