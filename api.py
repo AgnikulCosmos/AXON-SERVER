@@ -259,17 +259,40 @@ async def _call_ollama(prompt: str, max_tokens: int = 30) -> str:
         if not raw_val:
             raw_val = response_text.strip()
 
-        # Take only the first non-empty line
+        # Clean <think>...</think> block
+        import re as _re
+        raw_val = _re.sub(r'<think>.*?</think>', '', raw_val, flags=_re.DOTALL).strip()
+        raw_val = _re.sub(r'<think>.*$', '', raw_val, flags=_re.DOTALL).strip()
+        
+        # Take the first line that is NOT a thinking indicator
         first_line = ""
         for line in raw_val.splitlines():
             line = line.strip()
-            if line:
-                first_line = line
-                break
+            if not line:
+                continue
+            # Skip lines that are just thinking headers/indicators
+            lower_line = line.lower().rstrip(":")
+            if lower_line in (
+                "thinking", "thought", "reasoning", "thinking process", 
+                "thought process", "response", "answer", "title", "summary"
+            ):
+                continue
+            if lower_line.startswith(("thinking process", "thought process", "thinking:", "thought:", "reasoning:")):
+                continue
+            first_line = line
+            break
+            
+        if not first_line:
+            # Fallback: if all lines were skipped, take the first non-empty one anyway
+            for line in raw_val.splitlines():
+                line = line.strip()
+                if line:
+                    first_line = line
+                    break
+                    
         raw_val = first_line or raw_val
 
         # Strip model special tokens that leak into output
-        import re as _re
         raw_val = _re.sub(r'<\|[^|>]+\|>', '', raw_val)
         raw_val = _re.sub(r'<\[[^\]]+\]>', '', raw_val)
         raw_val = _re.sub(r'</?think>', '', raw_val)
