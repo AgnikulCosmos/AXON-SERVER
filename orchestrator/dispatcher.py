@@ -335,6 +335,22 @@ async def contextualize_query_with_history(query: str, session_id: str | None) -
     if not session_id:
         return query
 
+    query_lower_check = query.lower()
+    
+    # 1. Bypass if the query does not contain any ambiguous pronouns
+    PRONOUN_PATTERN = re.compile(
+        r'\b(it|he|she|they|this|that|him|her|them|its|his|their|these|those)\b',
+        re.IGNORECASE
+    )
+    if not PRONOUN_PATTERN.search(query):
+        logger.info(f"[Query Contextualizer] Bypassing rewrite — no ambiguous pronouns in query: {query!r}")
+        return query
+
+    # 2. Bypass if any specific Agnikul or ERP domain term is present
+    if any(entity in query_lower_check for entity in KNOWN_ENTITIES):
+        logger.info(f"[Query Contextualizer] Bypassing rewrite — known entity/domain keyword in query: {query!r}")
+        return query
+
     try:
         from services.erp.frappe_client import call_frappe
         session_data = await call_frappe({
@@ -355,22 +371,6 @@ async def contextualize_query_with_history(query: str, session_id: str | None) -
             past_msgs.append((role, content))
 
         if not past_msgs:
-            return query
-
-        query_lower_check = query.lower()
-        
-        # 1. Bypass if the query does not contain any ambiguous pronouns
-        PRONOUN_PATTERN = re.compile(
-            r'\b(it|he|she|they|this|that|him|her|them|its|his|their|these|those)\b',
-            re.IGNORECASE
-        )
-        if not PRONOUN_PATTERN.search(query):
-            logger.info(f"[Query Contextualizer] Bypassing rewrite — no ambiguous pronouns in query: {query!r}")
-            return query
-
-        # 2. Bypass if any specific Agnikul or ERP domain term is present
-        if any(entity in query_lower_check for entity in KNOWN_ENTITIES):
-            logger.info(f"[Query Contextualizer] Bypassing rewrite — known entity/domain keyword in query: {query!r}")
             return query
 
         # Take up to last 4 messages (optimized history window to avoid mismatch)
@@ -667,16 +667,33 @@ async def _run_agent(query: str, session_id: str | None = None):
                 matched_route_name = new_route.split(":", 1)[1]
                 if matched_route_name != pending_route:
                     should_discard = True
-            elif new_route in ("RAG", "TOOLS", "IDENTITY"):
-                # If tracking request, any RAG/TOOLS query is an intent switch.
+            elif new_route in ("RAG", "TOOLS", "IDENTITY", "QWEN"):
+                # If tracking request, any RAG/TOOLS/QWEN query is an intent switch.
                 # Otherwise, check if query looks like a distinct question/command.
                 if pending_route == "track_request":
                     import re as _re
                     is_req_id = _re.match(r"^\s*(?:PC|MM|MT|DL|LF|ERP_I|ERP-SF|FBSG|SUG|ERP-RU|ERP-FAQ|ERP-M|ERP_SF)[-_]\w+(?:[-_]\w+)*\s*$", query, _re.I)
                     if not is_req_id:
                         should_discard = True
-                elif any(query.lower().startswith(prefix) for prefix in ["what ", "when ", "how ", "where ", "who ", "did i ", "show me ", "list ", "tell me "]):
-                    should_discard = True
+                else:
+                    import re as _re
+                    words = _re.findall(r"\b[a-zA-Z]+\b", query.lower())
+                    first_word = words[0] if words else ""
+                    
+                    question_words = {
+                        "what", "when", "how", "where", "who", "why", "did", "show", "list", 
+                        "tell", "explain", "define", "is", "are", "can", "could", "would", "should", "do", "help"
+                    }
+                    topic_switch_keywords = {
+                        "leave", "holiday", "policy", "policies", "canteen", "food", "booking", "meal", 
+                        "rocket", "launch", "dhanush", "agnibaan", "salary", "payslip", "attendance"
+                    }
+                    
+                    is_question = first_word in question_words
+                    has_topic_switch = any(w in words for w in topic_switch_keywords)
+                    
+                    if is_question or has_topic_switch:
+                        should_discard = True
 
             if should_discard:
                 logger.info(f"User switched intent from {pending_route} to {new_route}. Discarding pending session.")
