@@ -216,8 +216,8 @@ ERP_INSTRUCTIONAL_GUIDES = {
     "erp_tickets_create": (
         "To raise an ERP support ticket, you can say 'raise a ticket' or 'create a support ticket'. "
         "I will ask you for details including the application name (e.g., Fleet Management, HR Operations), "
-        "the priority level (P0 to P3), and a description of the issue. "
-        "Once you provide these details, I will submit the support request."
+        "the priority level (P0 to P3), a description of the issue, and a mandatory image/screenshot showing the issue. "
+        "Once you provide these details and upload the image, I will submit the support request."
     ),
     "erp_tickets_list": (
         "To view your support tickets, you can say 'show my tickets' or 'list my support tickets'. "
@@ -609,14 +609,24 @@ async def _run_agent(query: str, session_id: str | None = None):
             if key and val:
                 structured_params[key] = val
 
+        # Auto-detect markdown image links for attachments field
+        md_image_match = _re.search(r'(!\[.*?\]\(.*?\))', query)
+        if md_image_match and "attachments" in missing_fields and "attachments" not in structured_params:
+            structured_params["attachments"] = md_image_match.group(1).strip()
+
         # Flexible parameter mapping for common user variations
         for desc_key in ["description", "item_description"]:
             if desc_key in structured_params:
                 desc_val = structured_params.pop(desc_key)
-                if "found" in pending_plan.get("route_name", ""):
-                    structured_params["found_description"] = desc_val
+                if pending_route == "lost_found_create":
+                    # Check if it is a found report or lost report
+                    q_lower = query.lower()
+                    if "found" in q_lower or "found" in pending_plan.get("route_name", ""):
+                        structured_params["found_description"] = desc_val
+                    else:
+                        structured_params["lost_description"] = desc_val
                 else:
-                    structured_params["lost_description"] = desc_val
+                    structured_params["description"] = desc_val
 
         if "app" in structured_params:
             structured_params["app_name"] = structured_params.pop("app")
@@ -627,22 +637,26 @@ async def _run_agent(query: str, session_id: str | None = None):
         # Extract parameters intelligently
         new_params = {}
         has_extracted_params = False
+        
         if structured_params:
-            new_params = structured_params
+            new_params.update(structured_params)
             has_extracted_params = True
-        else:
+
+        # Extract still missing fields using parameter_extractor
+        still_missing = [f for f in missing_fields if f not in new_params]
+        if still_missing:
             route_config = get_erp_route_config(pending_route)
             if route_config:
                 from copy import deepcopy
                 temp_config = deepcopy(route_config)
-                # Keep only missing fields in parameters schema so the extractor focuses precisely on them
                 temp_config["parameters"] = {
                     k: v for k, v in route_config.get("parameters", {}).items()
-                    if k in missing_fields
+                    if k in still_missing
                 }
                 import asyncio as _asyncio
-                new_params = await _asyncio.to_thread(extract_parameters, query, temp_config)
-                if new_params:
+                extracted = await _asyncio.to_thread(extract_parameters, query, temp_config)
+                if extracted:
+                    new_params.update(extracted)
                     has_extracted_params = True
 
         # 3. Check for intent switch ONLY if the user did NOT provide any parameter values for the pending session.

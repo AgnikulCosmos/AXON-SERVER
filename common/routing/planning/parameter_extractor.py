@@ -32,6 +32,10 @@ _EXTRACT_PROMPT = PARAMETER_EXTRACTION_PROMPT
 def _is_generic_or_filler(value: str) -> bool:
     val_clean = value.strip().lower().strip("!?.,'")
     
+    # Check if value is a markdown image link
+    if re.match(r'^!?\[.*?\]\(.*?\)$', value.strip()):
+        return True
+
     # Enforce minimum length of 4 characters
     if len(val_clean) < 4:
         return True
@@ -160,6 +164,12 @@ def extract_parameters(query: str, route_config: dict) -> dict:
             params_schema = {k: v for k, v in params_schema.items() if k in allowed}
 
     extracted_params: dict = {}
+
+    # Auto-extract markdown image links for attachments
+    if "attachments" in params_schema:
+        md_matches = re.findall(r'(!?\[.*?\]\(.*?\))', query)
+        if md_matches:
+            extracted_params["attachments"] = "\n".join(md_matches)
 
     # ── 1. LLM extraction ───────────────────────────────────────────────
     try:
@@ -504,7 +514,7 @@ def _erp_support_extract(query: str, route_config: dict, schema: dict) -> dict:
             r"\bfor\s+([A-Za-z0-9_& .-]+?)\s+app(?:lication)?\b",
         ],
         "module": [
-            r"\b(?:in|on|for|the|at|^)\s*([A-Za-z0-9_& -]{2,20})\s+module\b",
+            r"(?:^|\b)(?:in|on|for|the|at|and|or)?\s*([A-Za-z0-9_& -]{2,30})\s+module\b",
             r"\bmodule\s*[:=]\s*([A-Za-z0-9_& .-]+?)(?=,|\s+priority\b|\s+description\b|\s+issue\b|$)",
             r"\bmodule\s+([A-Za-z0-9_& .-]+?)(?=,|\s+priority\b|\s+description\b|\s+issue\b|$)",
         ],

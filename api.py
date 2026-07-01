@@ -116,7 +116,10 @@ async def lifespan(app: FastAPI):
     yield
 
 
+from fastapi.staticfiles import StaticFiles
+
 app = FastAPI(title="Agnikul Agent API", version="1.0", lifespan=lifespan)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,
@@ -327,12 +330,14 @@ async def generate_title_endpoint(req: TitleGenerationRequest):
             }
 
         # -------------------------------
-        # BATCHING LOGIC (Exact Logic)
+        # BATCHING LOGIC (Enhanced for early turns)
         # -------------------------------
         current_completed_batch = total_messages // 5
         last_completed_batch = last_title_count // 5 if last_title_count > 0 else 0
 
         if last_title_count == 0 and total_messages >= 1:
+            should_generate = True
+        elif total_messages <= 6 and total_messages > last_title_count:
             should_generate = True
         elif current_completed_batch > last_completed_batch:
             should_generate = True
@@ -643,9 +648,10 @@ async def upload_file(file: UploadFile = File(...)):
         with dest_path.open("wb") as f:
             f.write(contents)
 
+        filename = Path(file.filename).name
         return {
             "upload_id": upload_id,
-            "filepath": str(dest_path.resolve())
+            "filepath": f"/api/method/axon.api.get_uploaded_file?upload_id={upload_id}&filename={filename}"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")

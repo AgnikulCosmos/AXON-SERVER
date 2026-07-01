@@ -41,7 +41,19 @@ async def execute_tracking_plan(plan: dict) -> dict[str, Any]:
             
         elif req_id_upper.startswith(("ERP_I_", "ERP-SF-", "FBSG-", "SUG-", "ERP-RU-", "ERP-FAQ-", "ERP-M-")):
             raw_response = await view_erp_support_details(req_id_upper)
-            return _normalize_erp_support_response(raw_response)
+            full_doc = None
+            try:
+                from services.erp.frappe_client import call_frappe
+                full_doc_res = await call_frappe({
+                    "tool": "frappe.client.get",
+                    "http_method": "GET",
+                    "arguments": {"doctype": "ERP_Tickets", "name": req_id_upper}
+                })
+                if full_doc_res and "message" in full_doc_res:
+                    full_doc = full_doc_res["message"]
+            except Exception:
+                pass
+            return await _normalize_erp_support_response(raw_response, full_doc=full_doc)
             
         else:
             return {"status": "error", "message": f"Unsupported or unrecognized request ID format: {req_id}"}
@@ -283,7 +295,28 @@ def _normalize_maintenance_response(raw_response: dict) -> dict[str, Any]:
         "custom_details": customs
     }
 
-def _normalize_erp_support_response(raw_response: dict) -> dict[str, Any]:
+async def _get_full_name(email: str) -> str:
+    if not email:
+        return ""
+    try:
+        from services.erp.frappe_client import call_frappe
+        res = await call_frappe({
+            "tool": "frappe.client.get_value",
+            "http_method": "GET",
+            "arguments": {"doctype": "User", "filters": {"email": email}, "fieldname": "full_name"}
+        })
+        if res and "message" in res and res["message"]:
+            msg = res["message"]
+            if isinstance(msg, dict) and msg.get("full_name"):
+                return msg["full_name"]
+            if isinstance(msg, str):
+                return msg
+    except Exception:
+        pass
+    return email
+
+
+async def _normalize_erp_support_response(raw_response: dict, full_doc: dict = None) -> dict[str, Any]:
     raw = raw_response.get("message") or raw_response
     if isinstance(raw, dict) and raw.get("status") == "error":
         return raw
@@ -310,7 +343,80 @@ def _normalize_erp_support_response(raw_response: dict) -> dict[str, Any]:
         customs["Backend Developer"] = raw.get("be_dev")
         customs["Module"] = raw.get("module")
         customs["Roles"] = raw.get("roles")
+
+    assigned_to_name = "Unassigned"
+    if full_doc:
+        responses = full_doc.get("responses", [])
+        ticket_status = full_doc.get("status") or "Yet To Start"
         
+        if ticket_status == "Yet To Start":
+            # Collect FE and BE developers
+            fe_names = []
+            be_names = []
+            for r in responses:
+                role = r.get("role")
+                email = r.get("email")
+                if not email:
+                    continue
+                name = await _get_full_name(email)
+                if role == "Frontend Developer":
+                    fe_names.append(name)
+                elif role == "Backend Developer":
+                    be_names.append(name)
+            
+            parts = []
+            if fe_names:
+                parts.append(f"Frontend: {', '.join(fe_names)}")
+            if be_names:
+                parts.append(f"Backend: {', '.join(be_names)}")
+            if parts:
+                assigned_to_name = " | ".join(parts)
+        else:
+            # Find the person who moved the ticket to In Progress
+            in_progress_devs = []
+            for r in responses:
+                if r.get("action") == "In Progress":
+                    in_progress_devs.append(r)
+            
+            if not in_progress_devs:
+                # Fallback to any completed developer
+                for r in responses:
+                    if r.get("action") in ("Completed", "Work Not Required") and r.get("role") in ("Frontend Developer", "Backend Developer"):
+                        in_progress_devs.append(r)
+                        
+            if in_progress_devs:
+                names = []
+                for r in in_progress_devs:
+                    name = await _get_full_name(r.get("email"))
+                    role = r.get("role")
+                    role_short = "FE" if role == "Frontend Developer" else "BE" if role == "Backend Developer" else role
+                    names.append(f"{name} ({role_short})")
+                assigned_to_name = ", ".join(names)
+            else:
+                # Default fallback: list all assigned devs
+                fe_names = []
+                be_names = []
+                for r in responses:
+                    role = r.get("role")
+                    email = r.get("email")
+                    if not email:
+                        continue
+                    name = await _get_full_name(email)
+                    if role == "Frontend Developer":
+                        fe_names.append(name)
+                    elif role == "Backend Developer":
+                        be_names.append(name)
+                parts = []
+                if fe_names:
+                    parts.append(f"Frontend: {', '.join(fe_names)}")
+                if be_names:
+                    parts.append(f"Backend: {', '.join(be_names)}")
+                if parts:
+                    assigned_to_name = " | ".join(parts)
+    else:
+        # Fallback if no full_doc available
+        assigned_to_name = raw.get("assigned_to") or "Unassigned"
+
     return {
         "status": status,
         "id": raw.get("name"),
@@ -318,7 +424,7 @@ def _normalize_erp_support_response(raw_response: dict) -> dict[str, Any]:
         "type": raw.get("type") or "ERP Ticket",
         "raised_by": raised_by,
         "created_at": created_at,
-        "assigned_to": raw.get("assigned_to") or "Unassigned",
+        "assigned_to": assigned_to_name,
         "priority": raw.get("priority") or "N/A",
         "description": description,
         "title": f"ERP Support: {raw.get('name')}",

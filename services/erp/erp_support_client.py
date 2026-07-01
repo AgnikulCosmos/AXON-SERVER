@@ -28,7 +28,7 @@ _FIELD_LABELS = {
     "feedback": "Feedback/Suggestion",
     "ratings": "Rating",
     "helps": "Helps",
-    "attachments": "Attachments",
+    "attachments": "Image/Screenshot",
     "roles": "Roles",
     "status": "Status",
     "name": "Record Name",
@@ -43,22 +43,23 @@ _FIELD_LABELS = {
 }
 
 _FIELD_HINTS = {
-    "app_name": "e.g., Fleet Management, HR Operations",
+    "app_name": "Fleet Management, HR Operations",
     "priority": "Low, Medium, or High",
-    "module": "e.g., Vehicle Tracking, Leave",
+    "module": "Vehicle Tracking, Leave",
     "description": "A detailed description of the issue",
     "feedback": "Your suggestions or feedback",
     "ratings": "1 to 5 stars",
     "helps": "How this suggestion helps the organization",
-    "name": "e.g., LF-26-0526-08242",
+    "attachments": "Upload an image/screenshot showing the issue",
+    "name": "LF-26-0526-08242",
     "item_name": "What is the name of the lost item?",
     "lost_location": "Where did you lose the item?",
-    "lost_date": "e.g., today, yesterday, or YYYY-MM-DD",
+    "lost_date": "today, yesterday, or YYYY-MM-DD",
     "lost_description": "A description of the lost item",
     "found_location": "Where did you find the item?",
-    "found_date": "e.g., today, yesterday, or YYYY-MM-DD",
+    "found_date": "today, yesterday, or YYYY-MM-DD",
     "found_description": "Any comments about finding it",
-    "req_id": "e.g., PC-2026-0001, MM-2026-0003, or ERP_I_9876",
+    "req_id": "PC-2026-0001, MM-2026-0003, or ERP_I_9876",
 }
 
 
@@ -354,7 +355,7 @@ async def _fetch_app_developers(app_name: str) -> dict:
 
 
 async def _ticket_payload(params: dict) -> dict:
-    payload = await _require(params, ["app_name", "priority", "module", "description"])
+    payload = await _require(params, ["app_name", "priority", "module", "description", "attachments"])
 
     # ── Mandatory image attachment ──────────────────────────────────────────
     attachments = params.get("attachments")
@@ -367,6 +368,53 @@ async def _ticket_payload(params: dict) -> dict:
                 "You can attach it using the upload button, then describe your issue."
             )
         )
+
+    # Validate image attachment file extension (images only)
+    import os
+    allowed_extensions = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+    files_to_check = []
+    
+    # Try finding markdown images: ![alt](url)
+    md_matches = re.findall(r'!\[.*?\]\((.*?)\)', str(attachments))
+    if md_matches:
+        files_to_check.extend(md_matches)
+    else:
+        # Try JSON parsing
+        import json
+        try:
+            data = json.loads(attachments)
+            if isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict):
+                        if item.get("file_name"):
+                            files_to_check.append(item["file_name"])
+                        elif item.get("url"):
+                            files_to_check.append(item["url"])
+                        elif item.get("file_id"):
+                            files_to_check.append(item["file_id"])
+                    elif isinstance(item, str):
+                        files_to_check.append(item)
+            elif isinstance(data, dict):
+                if data.get("file_name"):
+                    files_to_check.append(data["file_name"])
+                elif data.get("url"):
+                    files_to_check.append(data["url"])
+                elif data.get("file_id"):
+                    files_to_check.append(data["file_id"])
+        except Exception:
+            files_to_check.append(str(attachments).strip())
+
+    for f in files_to_check:
+        clean_f = f.split("?")[0].lower().strip()
+        ext = os.path.splitext(clean_f)[1]
+        if ext not in allowed_extensions:
+            raise MissingParametersError(
+                [],
+                extra_context=(
+                    "❌ **Invalid file type.** Only image attachments (PNG, JPG, JPEG, GIF, WEBP) are allowed for ERP support tickets.\n\n"
+                    "Please upload a valid image/screenshot showing the issue."
+                )
+            )
 
     issue_dt = params.get("issue_dt")
     if issue_dt:
