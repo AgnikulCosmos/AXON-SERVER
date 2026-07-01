@@ -607,31 +607,50 @@ def _erp_support_extract(query: str, route_config: dict, schema: dict) -> dict:
             extracted["feedback"] = q_clean
 
     if "description" in schema and "description" not in extracted:
-        # If it is ticket creation
-        q_clean = query
-        # Remove priority patterns (P0-P3, High, Medium, Low)
-        for val in ["low", "medium", "high", "p0", "p1", "p2", "p3"]:
-            q_clean = re.sub(rf"\b{re.escape(val)}\b", "", q_clean, flags=re.I)
-        # Remove app name aliases
-        for canonical, aliases in APP_NAME_MAPPING.items():
-            for alias in aliases:
-                q_clean = re.sub(rf"\bfor\s+(?:the\s+)?{re.escape(alias)}\b", "", q_clean, flags=re.I)
-                q_clean = re.sub(rf"\bin\s+(?:the\s+)?{re.escape(alias)}\b", "", q_clean, flags=re.I)
-                q_clean = re.sub(rf"\b{re.escape(alias)}\b", "", q_clean, flags=re.I)
-        # Remove module patterns
-        q_clean = re.sub(r"\bmodule\s*[:=]?\s*[A-Za-z0-9_& .-]+?\b", "", q_clean, flags=re.I)
-        # Remove generic ticket verbs/triggers
-        q_clean = re.sub(r"\b(raise|create|open|lodge|submit|report)\s+(?:a\s+)?(?:ticket|issue|bug|request|problem)\b", "", q_clean, flags=re.I)
-        q_clean = re.sub(r"\b(ticket|issue|bug|request|problem)\b", "", q_clean, flags=re.I)
-        
-        q_clean = q_clean.strip("!?.,;:'\" ")
-        q_clean = re.sub(r"\s+", " ", q_clean).strip()
-        # Clean leading/trailing conjunctions
-        q_clean = re.sub(r"^(?:and|or|with|for|about|to)\s+", "", q_clean, flags=re.I)
-        q_clean = re.sub(r"\s+(?:and|or|with|for|about|to)$", "", q_clean, flags=re.I)
-        
-        if q_clean and len(q_clean) > 3:
-            extracted["description"] = q_clean
+        # ── Step 1: Check for explicit labeled description first ──────────────
+        explicit_desc_patterns = [
+            r"(?:description|issue|problem|bug|error|concern)\s*[:=]\s*(.+)$",
+            r"(?:there\s+is|i\s+am\s+facing|i\s+face|i\s+notice[d]?|the\s+problem\s+is|the\s+issue\s+is|the\s+bug\s+is|the\s+error\s+is|it\s+is\s+showing)\s+(.+)$",
+            r"(?:reporting|report)\s+(?:a|an|the)?\s*(?:bug|issue|problem|error)[:.]?\s*(.+)$",
+        ]
+        desc_from_explicit = None
+        for pat in explicit_desc_patterns:
+            m = re.search(pat, query, re.I | re.S)
+            if m:
+                candidate = m.group(1).strip()
+                if candidate and len(candidate) > 5 and not _is_generic_or_filler(candidate):
+                    desc_from_explicit = candidate
+                    break
+
+        if desc_from_explicit:
+            extracted["description"] = desc_from_explicit
+        else:
+            # ── Step 2: Heuristic stripping (keep this as last resort) ────────
+            q_clean = query
+            # Remove priority patterns (P0-P3, High, Medium, Low)
+            for val in ["low", "medium", "high", "p0", "p1", "p2", "p3"]:
+                q_clean = re.sub(rf"\b{re.escape(val)}\b", "", q_clean, flags=re.I)
+            # Remove app name aliases
+            for canonical, aliases in APP_NAME_MAPPING.items():
+                for alias in aliases:
+                    q_clean = re.sub(rf"\bfor\s+(?:the\s+)?{re.escape(alias)}\b", "", q_clean, flags=re.I)
+                    q_clean = re.sub(rf"\bin\s+(?:the\s+)?{re.escape(alias)}\b", "", q_clean, flags=re.I)
+                    q_clean = re.sub(rf"\b{re.escape(alias)}\b", "", q_clean, flags=re.I)
+            # Remove module patterns
+            q_clean = re.sub(r"\bmodule\s*[:=]?\s*[A-Za-z0-9_& .-]+?\b", "", q_clean, flags=re.I)
+            # Remove generic ticket verbs/triggers
+            q_clean = re.sub(r"\b(raise|create|open|lodge|submit|report)\s+(?:a\s+)?(?:ticket|issue|bug|request|problem)\b", "", q_clean, flags=re.I)
+            # Only remove standalone filler words — NOT "issue" or "bug" when followed by a description
+            q_clean = re.sub(r"\b(ticket|request)\b", "", q_clean, flags=re.I)
+
+            q_clean = q_clean.strip("!?.,;:'\" ")
+            q_clean = re.sub(r"\s+", " ", q_clean).strip()
+            # Clean leading/trailing conjunctions
+            q_clean = re.sub(r"^(?:and|or|with|for|about|to)\s+", "", q_clean, flags=re.I)
+            q_clean = re.sub(r"\s+(?:and|or|with|for|about|to)$", "", q_clean, flags=re.I)
+
+            if q_clean and len(q_clean) > 3:
+                extracted["description"] = q_clean
 
     return extracted
 

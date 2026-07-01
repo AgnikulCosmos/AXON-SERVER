@@ -306,6 +306,31 @@ PENDING_ERP_SESSIONS = _PersistentDict()
 
 
 
+def _validate_rewritten_query(original: str, rewritten: str) -> bool:
+    rewritten_clean = rewritten.strip().lower()
+    original_clean = original.strip().lower()
+    
+    if rewritten_clean == original_clean:
+        return True
+        
+    # Check for dialog markers or prompt residue
+    for marker in ["user:", "assistant:", "rewritten query:", "chat history:", "query:"]:
+        if marker in rewritten_clean:
+            return False
+            
+    # Check if LLM tried to answer the query instead of rewriting it
+    instruction_keywords = {"navigate to", "click on", "you can", "please open", "here is", "here are", "according to", "based on", "the context", "to raise"}
+    for kw in instruction_keywords:
+        if kw in rewritten_clean and kw not in original_clean:
+            return False
+            
+    # Check for length explosion
+    if len(rewritten_clean) > max(100, len(original_clean) * 2.5):
+        return False
+        
+    return True
+
+
 async def contextualize_query_with_history(query: str, session_id: str | None) -> str:
     if not session_id:
         return query
@@ -348,8 +373,8 @@ async def contextualize_query_with_history(query: str, session_id: str | None) -
             logger.info(f"[Query Contextualizer] Bypassing rewrite — known entity/domain keyword in query: {query!r}")
             return query
 
-        # Take up to last 6 messages
-        recent_history = past_msgs[-6:]
+        # Take up to last 4 messages (optimized history window to avoid mismatch)
+        recent_history = past_msgs[-4:]
         history_str = ""
         for role, content in recent_history:
             history_str += f"{role}: {content}\n"
@@ -372,9 +397,26 @@ async def contextualize_query_with_history(query: str, session_id: str | None) -
                 rewritten = resp.get("response", "").strip().strip("\"'")
             else:
                 rewritten = str(resp).strip().strip("\"'")
+            
             if rewritten:
-                logger.info(f"[Query Contextualizer] Original: {query!r} -> Rewritten: {rewritten!r}")
-                return rewritten
+                # Clean up rewritten response
+                if "\n" in rewritten:
+                    lines = [l.strip() for l in rewritten.split("\n") if l.strip()]
+                    for line in lines:
+                        if line.lower().startswith("rewritten query:"):
+                            rewritten = line[len("rewritten query:"):].strip()
+                            break
+                    else:
+                        rewritten = lines[0]
+                
+                if rewritten.lower().startswith("rewritten query:"):
+                    rewritten = rewritten[len("rewritten query:"):].strip()
+
+                if _validate_rewritten_query(query, rewritten):
+                    logger.info(f"[Query Contextualizer] Original: {query!r} -> Rewritten: {rewritten!r}")
+                    return rewritten
+                else:
+                    logger.warning(f"[Query Contextualizer] Discarded invalid/hallucinated rewritten query: {rewritten!r}")
 
     except Exception as err:
         logger.warning(f"Failed to contextualize query: {err}")
@@ -398,6 +440,9 @@ def is_relationship_query(query: str) -> bool:
 
 
 async def _run_agent(query: str, session_id: str | None = None):
+    # Normalize the query first to correct spelling typos (e.g., 'Leava' -> 'Leave')
+    from common.routing.router import _normalize_query
+    query = _normalize_query(query)
     temp_q = query.lower().strip("!?., ")
 
     # Automated Flagging Middleware

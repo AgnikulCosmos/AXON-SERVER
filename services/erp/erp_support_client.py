@@ -274,7 +274,11 @@ async def execute_erp_support_plan(plan: dict) -> dict:
         return await list_erp_suggestions(**_list_params(params))
 
     if route_name == "erp_tickets_create":
-        return await create_erp_ticket(**(await _ticket_payload(params)))
+        ticket_payload = await _ticket_payload(params)
+        # Store developer info in plan for the confirmation message
+        plan["_fe_dev"] = ticket_payload.pop("_fe_dev", "")
+        plan["_be_dev"] = ticket_payload.pop("_be_dev", "")
+        return await create_erp_ticket(**ticket_payload)
     elif route_name == "erp_feedback_create":
         return await create_erp_feedback(**(await _feedback_payload(params)))
     elif route_name == "erp_suggestion_create":
@@ -307,14 +311,63 @@ async def format_erp_support_response(plan: dict, response: dict) -> str:
         name = data.get("name")
         message = data.get("message") or "Request processed."
         if status == "success" and name:
+            # For ticket creation, include assigned developer info
+            if plan.get("route_name") == "erp_tickets_create":
+                fe_dev = plan.get("_fe_dev", "")
+                be_dev = plan.get("_be_dev", "")
+                dev_line = ""
+                if fe_dev or be_dev:
+                    parts = []
+                    if fe_dev:
+                        parts.append(f"Frontend: {fe_dev}")
+                    if be_dev:
+                        parts.append(f"Backend: {be_dev}")
+                    dev_line = f"\n👤 **Assigned to:** {', '.join(parts)}"
+                return f"{message} Reference ID: **{name}**{dev_line}"
             return f"{message} Reference ID: {name}"
         return message
 
     return str(data)
 
 
+async def _fetch_app_developers(app_name: str) -> dict:
+    """Fetch FE and BE developer emails from ERP_Applications for the given app_name."""
+    try:
+        response = await list_erp_apps(query=app_name, limit=5)
+        data = response.get("message", response) if isinstance(response, dict) else {}
+        if isinstance(data, dict):
+            records = data.get("data", [])
+        else:
+            records = []
+        for record in records:
+            if isinstance(record, dict):
+                name_clean = str(record.get("name", "")).lower().strip()
+                app_clean = app_name.lower().strip()
+                if name_clean == app_clean or app_clean in name_clean or name_clean in app_clean:
+                    return {
+                        "fe_dev": record.get("fe_dev") or "",
+                        "be_dev": record.get("be_dev") or "",
+                    }
+    except Exception:
+        pass
+    return {"fe_dev": "", "be_dev": ""}
+
+
 async def _ticket_payload(params: dict) -> dict:
     payload = await _require(params, ["app_name", "priority", "module", "description"])
+
+    # ── Mandatory image attachment ──────────────────────────────────────────
+    attachments = params.get("attachments")
+    if not attachments or str(attachments).strip() in ("", "None"):
+        raise MissingParametersError(
+            [],
+            extra_context=(
+                "📎 **An image/screenshot is required to create an ERP support ticket.**\n\n"
+                "Please upload a screenshot or image showing the issue. "
+                "You can attach it using the upload button, then describe your issue."
+            )
+        )
+
     issue_dt = params.get("issue_dt")
     if issue_dt:
         issue_dt = _resolve_single_date(issue_dt)
@@ -325,6 +378,14 @@ async def _ticket_payload(params: dict) -> dict:
         "issue_dt": issue_dt,
     })
     _copy_optional(payload, params, ["attachments", "roles"])
+
+    # ── Fetch and store developer info for confirmation message ─────────────
+    app_name = payload.get("app_name", "")
+    if app_name:
+        devs = await _fetch_app_developers(app_name)
+        payload["_fe_dev"] = devs.get("fe_dev", "")
+        payload["_be_dev"] = devs.get("be_dev", "")
+
     return payload
 
 
