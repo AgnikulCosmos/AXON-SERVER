@@ -290,6 +290,13 @@ async def route_query(query: str, exclude_how_to: bool = False) -> str:
         logger.info(f"[Router] Intercepting disallowed ERP creation/action early for query {query!r} -> Forcing RAG")
         return "RAG"
 
+    # Intercept disallowed non-ERP ticket creations (IT, Network, Laptop, etc.) early and route to RAG.
+    disallowed_ticket_keywords = {"it", "network", "laptop", "printer", "security", "access", "office", "admin"}
+    ticket_keywords = {"ticket", "tickets", "request", "requests", "support"}
+    if (words & action_verbs or words & ticket_keywords) and (words & disallowed_ticket_keywords):
+        logger.info(f"[Router] Intercepting disallowed non-ERP ticket creation early for query {query!r} -> Forcing RAG")
+        return "RAG"
+
     # Normalize query — fix domain-specific typos before embedding lookup
     normalized_query = _normalize_query(query)
     if normalized_query != query:
@@ -340,7 +347,7 @@ async def route_query(query: str, exclude_how_to: bool = False) -> str:
                 route_name = "QWEN"
 
         # 2. Create vs List Disambiguation
-        if route_name != "QWEN":
+        if route_name not in TOP_LEVEL_CATEGORIES:
             route_name = await _disambiguate_route_with_llm(query, route_name)
 
         if route_name in TOP_LEVEL_CATEGORIES:
