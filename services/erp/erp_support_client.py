@@ -136,7 +136,7 @@ async def _validate_and_fix_app_name(params: dict, fields: list) -> tuple[dict, 
                     fixed_params["app_name"] = normalized
                 else:
                     missing.append(field)
-                    fixed_params["_app_name_error"] = f"'{raw_app_name}' is not a valid application name"
+                    fixed_params["_app_name_error"] = f"❌ **'{raw_app_name}'** is not a recognized ERP application. Please specify one of the valid applications (e.g., *Fleet Management*, *HR Operations*, etc.)."
         elif params.get(field) in (None, ""):
             missing.append(field)
     
@@ -148,15 +148,9 @@ async def _require(params: dict, fields: list[str]) -> dict:
     
     if missing:
         app_error = fixed_params.get("_app_name_error")
-        if app_error and "app_name" in missing:
-            missing.remove("app_name")
-            if missing:
-                raise MissingParametersError(missing, extra_context=app_error)
-            else:
-                raise MissingParametersError([], extra_context=app_error)
-        
-        if missing:
-            raise MissingParametersError(missing)
+        if app_error:
+            raise MissingParametersError(missing, extra_context=app_error)
+        raise MissingParametersError(missing)
     
     result = {field: fixed_params[field] for field in fields if field in fixed_params}
     return result
@@ -361,7 +355,7 @@ async def _ticket_payload(params: dict) -> dict:
     attachments = params.get("attachments")
     if not attachments or str(attachments).strip() in ("", "None"):
         raise MissingParametersError(
-            [],
+            ["attachments"],
             extra_context=(
                 "📎 **An image/screenshot is required to create an ERP support ticket.**\n\n"
                 "Please upload a screenshot or image showing the issue. "
@@ -371,6 +365,7 @@ async def _ticket_payload(params: dict) -> dict:
 
     # Validate image attachment file extension (images only)
     import os
+    from urllib.parse import urlparse, parse_qs
     allowed_extensions = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
     files_to_check = []
     
@@ -405,16 +400,30 @@ async def _ticket_payload(params: dict) -> dict:
             files_to_check.append(str(attachments).strip())
 
     for f in files_to_check:
-        clean_f = f.split("?")[0].lower().strip()
-        ext = os.path.splitext(clean_f)[1]
+        parsed = urlparse(f)
+        query_params = parse_qs(parsed.query)
+        
+        # Check if there's a filename or file in the query parameters
+        filename_val = None
+        for key in ["filename", "file", "upload", "name"]:
+            if key in query_params and query_params[key]:
+                filename_val = query_params[key][0]
+                break
+                
+        check_target = filename_val if filename_val else parsed.path
+        clean_target = check_target.lower().strip()
+        ext = os.path.splitext(clean_target)[1]
+        
         if ext not in allowed_extensions:
-            raise MissingParametersError(
-                [],
-                extra_context=(
-                    "❌ **Invalid file type.** Only image attachments (PNG, JPG, JPEG, GIF, WEBP) are allowed for ERP support tickets.\n\n"
-                    "Please upload a valid image/screenshot showing the issue."
+            # Fallback check: does the original string path contain any of the allowed extensions?
+            if not any(allowed_ext in clean_target for allowed_ext in allowed_extensions):
+                raise MissingParametersError(
+                    ["attachments"],
+                    extra_context=(
+                        "❌ **Invalid file type.** Only image attachments (PNG, JPG, JPEG, GIF, WEBP) are allowed for ERP support tickets.\n\n"
+                        "Please upload a valid image/screenshot showing the issue."
+                    )
                 )
-            )
 
     issue_dt = params.get("issue_dt")
     if issue_dt:

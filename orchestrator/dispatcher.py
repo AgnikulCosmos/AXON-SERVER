@@ -872,7 +872,10 @@ async def _run_agent(query: str, session_id: str | None = None):
                 if session_id:
                     plan["_missing_fields"] = e.fields
                     PENDING_ERP_SESSIONS[session_id] = plan
-                result = await _get_friendly_missing_fields_message(e.fields, plan.get("route_name"))
+                if e.extra_context:
+                    result = e.extra_context
+                else:
+                    result = await _get_friendly_missing_fields_message(e.fields, plan.get("route_name"))
             except ValueError as e:
                 if session_id and session_id in PENDING_ERP_SESSIONS:
                     del PENDING_ERP_SESSIONS[session_id]
