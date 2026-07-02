@@ -32,6 +32,61 @@ async def create_erp_ticket(**kwargs: Any) -> dict:
     )
 
 
+async def assign_ticket_developers(ticket_name: str, fe_dev: str = "", be_dev: str = "") -> dict:
+    """
+    Append initial Frontend/Backend developer Responses rows to a freshly created
+    ERP ticket so that the developers can see it in their ERP UI.
+    Uses frappe.client.get + frappe.client.save to merge without touching other fields.
+    Non-critical — errors are swallowed by the caller.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    if not ticket_name or not (fe_dev or be_dev):
+        return {}
+
+    try:
+        # Fetch the current doc (needed for frappe.client.save)
+        doc_resp = await _call(
+            "frappe.client.get",
+            "GET",
+            {"doctype": "ERP_Tickets", "name": ticket_name},
+        )
+        doc = doc_resp.get("message") if isinstance(doc_resp, dict) else None
+        if not isinstance(doc, dict):
+            logger.warning("assign_ticket_developers: could not fetch ticket %s", ticket_name)
+            return {}
+
+        # Build new Responses rows
+        existing = doc.get("responses") or []
+        if fe_dev:
+            existing.append({
+                "doctype": "Responses",
+                "email": fe_dev,
+                "role": "Frontend Developer",
+                "action": "Pending",
+                "version": "V1.00",
+            })
+        if be_dev:
+            existing.append({
+                "doctype": "Responses",
+                "email": be_dev,
+                "role": "Backend Developer",
+                "action": "Pending",
+                "version": "V1.00",
+            })
+        doc["responses"] = existing
+
+        return await _call(
+            "frappe.client.save",
+            "POST",
+            {"doc": doc},
+        )
+    except Exception as exc:
+        logger.warning("assign_ticket_developers failed (non-critical): %s", exc)
+        return {}
+
+
 async def create_erp_feedback(**kwargs: Any) -> dict:
     return await _call(
         "erp_support.put_api.create",

@@ -271,9 +271,28 @@ async def execute_erp_support_plan(plan: dict) -> dict:
     if route_name == "erp_tickets_create":
         ticket_payload = await _ticket_payload(params)
         # Store developer info in plan for the confirmation message
-        plan["_fe_dev"] = ticket_payload.pop("_fe_dev", "")
-        plan["_be_dev"] = ticket_payload.pop("_be_dev", "")
-        return await create_erp_ticket(**ticket_payload)
+        fe_dev = ticket_payload.pop("_fe_dev", "")
+        be_dev = ticket_payload.pop("_be_dev", "")
+        plan["_fe_dev"] = fe_dev
+        plan["_be_dev"] = be_dev
+
+        result = await create_erp_ticket(**ticket_payload)
+
+        # Auto-assign developers so ticket appears in their ERP UI
+        # Frappe wraps the return value in {"message": {...}}
+        _result_inner = result.get("message", result) if isinstance(result, dict) else {}
+        if isinstance(_result_inner, dict) and isinstance(_result_inner.get("message"), dict):
+            _result_inner = _result_inner["message"]
+        ticket_name = _result_inner.get("name") if isinstance(_result_inner, dict) else None
+
+        if ticket_name and (fe_dev or be_dev):
+            from services.erp.mcp_registry import assign_ticket_developers
+            try:
+                await assign_ticket_developers(ticket_name, fe_dev, be_dev)
+            except Exception:
+                pass  # Non-critical; ticket was already created
+
+        return result
     elif route_name == "erp_feedback_create":
         return await create_erp_feedback(**(await _feedback_payload(params)))
     elif route_name == "erp_suggestion_create":
@@ -317,7 +336,7 @@ async def format_erp_support_response(plan: dict, response: dict) -> str:
                         parts.append(f"Frontend: {fe_dev}")
                     if be_dev:
                         parts.append(f"Backend: {be_dev}")
-                    dev_line = f"\n**Assigned to:** {', '.join(parts)}"
+                    dev_line = f"\n **Assigned to:** {', '.join(parts)}"
                 return f"{message} Reference ID: **{name}**{dev_line}"
             return f"{message} Reference ID: {name}"
         return message
