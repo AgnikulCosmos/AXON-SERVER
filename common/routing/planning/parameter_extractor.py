@@ -165,11 +165,42 @@ def extract_parameters(query: str, route_config: dict) -> dict:
 
     extracted_params: dict = {}
 
-    # Auto-extract markdown image links for attachments
+    # Auto-extract markdown image links for attachments using balanced parenthesis matching
+    auto_attachments = None
     if "attachments" in params_schema:
-        md_matches = re.findall(r'(!?\[.*?\]\(.*?\))', query)
+        md_matches = []
+        attachments_str = str(query).strip()
+        idx = 0
+        while True:
+            start = attachments_str.find("![", idx)
+            if start == -1:
+                break
+            alt_close = attachments_str.find("]", start)
+            if alt_close == -1:
+                break
+            if alt_close + 1 < len(attachments_str) and attachments_str[alt_close + 1] == "(":
+                url_start = alt_close + 2
+                paren_count = 1
+                url_end = url_start
+                while url_end < len(attachments_str) and paren_count > 0:
+                    if attachments_str[url_end] == "(":
+                        paren_count += 1
+                    elif attachments_str[url_end] == ")":
+                        paren_count -= 1
+                    url_end += 1
+                if paren_count == 0:
+                    url = attachments_str[url_start:url_end - 1]
+                    alt_text = attachments_str[start+2:alt_close]
+                    md_matches.append(f"![{alt_text}]({url})")
+                    idx = url_end
+                else:
+                    idx = alt_close + 1
+            else:
+                idx = alt_close + 1
+        
         if md_matches:
-            extracted_params["attachments"] = "\n".join(md_matches)
+            auto_attachments = "\n".join(md_matches)
+            extracted_params["attachments"] = auto_attachments
 
     # ── 1. LLM extraction ───────────────────────────────────────────────
     try:
@@ -272,6 +303,9 @@ def extract_parameters(query: str, route_config: dict) -> dict:
             if val in ("today", "yesterday", "tomorrow", "this week", "last week", "this month", "last month"):
                 logger.info(f"Discarding temporal keyword as location: {extracted_params[loc_field]}")
                 del extracted_params[loc_field]
+
+    if auto_attachments:
+        extracted_params["attachments"] = auto_attachments
 
     logger.debug("Merged extraction result: %s", extracted_params)
     return extracted_params

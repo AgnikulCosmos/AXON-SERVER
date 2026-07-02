@@ -366,7 +366,7 @@ async def _ticket_payload(params: dict) -> dict:
     # Validate image attachment file extension (images only)
     import os
     from urllib.parse import urlparse, parse_qs
-    allowed_extensions = {".png"}
+    allowed_extensions = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
     files_to_check = []
     
     # Try finding markdown images: ![alt](url) by parsing balanced parentheses
@@ -460,8 +460,8 @@ async def _ticket_payload(params: dict) -> dict:
                 raise MissingParametersError(
                     ["attachments"],
                     extra_context=(
-                        "**Invalid file type.** Only PNG image attachments are allowed for ERP support tickets.\n\n"
-                        "Please upload a valid PNG image/screenshot showing the issue."
+                        "**Invalid file type.** Only image attachments (PNG, JPG, JPEG, GIF, WEBP) are allowed for ERP support tickets.\n\n"
+                        "Please upload a valid image/screenshot showing the issue."
                     )
                 )
 
