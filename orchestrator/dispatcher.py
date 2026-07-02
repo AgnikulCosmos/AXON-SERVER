@@ -5,7 +5,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from common.routing.router import route_query, get_erp_route_config
+from common.routing.router import route_query, get_erp_route_config, is_how_to_query
 from common.rag.rag_tool import rag_search
 from common.constants import (
     ACTION_VERBS, ALLOWED_ACTION_CONTEXTS, FOUNDERS,
@@ -194,14 +194,7 @@ async def _get_friendly_missing_fields_message(fields: list[str], route_name: st
     return "\n\n".join(lines)
 
 
-def is_how_to_query(query: str) -> bool:
-    q = query.lower().strip("!?., ")
-    how_indicators = [
-        "how to", "how do i", "how can i", "how should i", "how does", "how do we", "how is",
-        "steps to", "procedure to", "guideline for", "guide to", "how do we go about",
-        "steps for", "instruction for", "instructions for", "how do we do"
-    ]
-    return any(indicator in q for indicator in how_indicators)
+
 
 ERP_INSTRUCTIONAL_GUIDES = {
     "lost_found_create": (
@@ -570,7 +563,7 @@ async def _run_agent(query: str, session_id: str | None = None):
             return rag_res
 
         # 2. Check if query maps to an ERP route
-        matched_route = await route_query(query)
+        matched_route = await route_query(query, exclude_how_to=True)
         if matched_route and matched_route.startswith("ERP_ROUTE:"):
             route_name = matched_route.split(":", 1)[1]
             guide = ERP_INSTRUCTIONAL_GUIDES.get(route_name)

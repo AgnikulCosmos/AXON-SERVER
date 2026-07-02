@@ -126,15 +126,18 @@ class SemanticRouter:
         return np.dot(matrix_norm, query_norm)
 
     # ---------------------------
-    # Match route
-    # ---------------------------
-    def match(self, query: str):
+    def match(self, query: str, exclude_routes: list = None):
         query_embedding = get_embedding(query.lower().strip())
 
         similarities = self._cosine_similarity(
             query_embedding,
             self.route_embeddings
         )
+
+        if exclude_routes:
+            for idx, r_name in enumerate(self.index_to_route_name):
+                if r_name in exclude_routes:
+                    similarities[idx] = -1.0
 
         best_index = np.argmax(similarities)
         best_score = similarities[best_index]

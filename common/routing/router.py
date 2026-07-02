@@ -214,7 +214,17 @@ def _normalize_query(query: str) -> str:
     return " ".join(corrected)
 
 
-async def route_query(query: str) -> str:
+def is_how_to_query(query: str) -> bool:
+    q = query.lower().strip("!?., ")
+    how_indicators = [
+        "how to", "how do i", "how can i", "how should i", "how does", "how do we", "how is",
+        "steps to", "procedure to", "guideline for", "guide to", "how do we go about",
+        "steps for", "instruction for", "instructions for", "how do we do"
+    ]
+    return any(indicator in q for indicator in how_indicators)
+
+
+async def route_query(query: str, exclude_how_to: bool = False) -> str:
     if contains_profanity(query):
         return "PROFANITY"
 
@@ -308,7 +318,12 @@ async def route_query(query: str) -> str:
     # Hybrid Semantic-LLM classifier
     router = _get_intent_router(threshold=0.45)
     semantic = router._get_semantic()
-    match_result = semantic.match(query) if semantic else None
+    
+    exclude_routes = []
+    if exclude_how_to or not is_how_to_query(query):
+        exclude_routes.append("HOW_TO")
+        
+    match_result = semantic.match(query, exclude_routes=exclude_routes) if semantic else None
 
     if match_result:
         route_name = match_result["route"]["route_name"]

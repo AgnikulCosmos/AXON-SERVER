@@ -656,6 +656,18 @@ async def upload_file(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
 
+
+@app.get("/v1/session_status/{session_id}")
+async def get_session_status(session_id: str):
+    from orchestrator.dispatcher import PENDING_ERP_SESSIONS
+    pending = PENDING_ERP_SESSIONS.get(session_id)
+    pending_route = pending.get("route_name") if pending else None
+    return {
+        "session_id": session_id,
+        "pending_route": pending_route
+    }
+
+
 # Trigger reload config: switch to qwen2.5:0.5b
 
 @app.get("/v1/admin/dataset")
