@@ -327,17 +327,7 @@ async def format_erp_support_response(plan: dict, response: dict) -> str:
         if status == "success" and name:
             # For ticket creation, include assigned developer info
             if plan.get("route_name") == "erp_tickets_create":
-                fe_dev = plan.get("_fe_dev", "")
-                be_dev = plan.get("_be_dev", "")
-                dev_line = ""
-                if fe_dev or be_dev:
-                    parts = []
-                    if fe_dev:
-                        parts.append(f"Frontend: {fe_dev}")
-                    if be_dev:
-                        parts.append(f"Backend: {be_dev}")
-                    dev_line = f"\n **Assigned to:** {', '.join(parts)}"
-                return f"{message} Reference ID: **{name}**{dev_line}"
+                return f"{message} Reference ID: **{name}**"
             return f"{message} Reference ID: {name}"
         return message
 
@@ -644,13 +634,6 @@ async def _ticket_payload(params: dict) -> dict:
     })
     
     _copy_optional(payload, params, ["roles"])
-
-    # ── Fetch and store developer info for confirmation message ─────────────
-    app_name = payload.get("app_name", "")
-    if app_name:
-        devs = await _fetch_app_developers(app_name)
-        payload["_fe_dev"] = devs.get("fe_dev", "")
-        payload["_be_dev"] = devs.get("be_dev", "")
 
     return payload
 

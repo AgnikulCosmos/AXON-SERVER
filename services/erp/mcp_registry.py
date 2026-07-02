@@ -62,16 +62,10 @@ async def assign_ticket_developers(ticket_name: str, fe_dev: str = "", be_dev: s
         existing = doc.get("responses") or []
         existing_emails = {r.get("email") for r in existing if isinstance(r, dict) and r.get("email")}
 
-        # We must assign emp77@agnikul.in and emp78@agnikul.in to ensure visibility
-        devs_to_add = [
-            ("emp77@agnikul.in", "Frontend Developer"),
-            ("emp78@agnikul.in", "Backend Developer")
-        ]
-
-        # Also add app-specific developers if provided and not duplicate
-        if fe_dev and fe_dev not in {"emp77@agnikul.in", "emp78@agnikul.in"}:
+        devs_to_add = []
+        if fe_dev:
             devs_to_add.append((fe_dev, "Frontend Developer"))
-        if be_dev and be_dev not in {"emp77@agnikul.in", "emp78@agnikul.in"}:
+        if be_dev:
             devs_to_add.append((be_dev, "Backend Developer"))
 
         added_any = False

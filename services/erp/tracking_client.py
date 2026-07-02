@@ -193,8 +193,6 @@ def format_tracking_response(normalized: dict) -> str:
     lines.append(f"Raised By: {normalized['raised_by']}")
     if normalized.get("created_at"):
         lines.append(f"Created At: {normalized['created_at']}")
-    if normalized.get("assigned_to"):
-        lines.append(f"Assigned To: {normalized['assigned_to']}")
     if normalized.get("priority"):
         lines.append(f"Priority: {normalized['priority']}")
 
