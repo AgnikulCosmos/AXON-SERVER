@@ -543,8 +543,38 @@ async def _ticket_payload(params: dict) -> dict:
 
     # Clean description: strip markdown image links
     if "description" in payload:
-        import re
-        payload["description"] = re.sub(r'!\[.*?\]\(.*?\)', '', payload["description"]).strip()
+        desc = payload["description"]
+        result = []
+        idx = 0
+        while idx < len(desc):
+            start = desc.find("![", idx)
+            if start == -1:
+                result.append(desc[idx:])
+                break
+            result.append(desc[idx:start])
+            alt_close = desc.find("]", start)
+            if alt_close == -1:
+                result.append(desc[start:])
+                break
+            if alt_close + 1 < len(desc) and desc[alt_close + 1] == "(":
+                url_start = alt_close + 2
+                paren_count = 1
+                url_end = url_start
+                while url_end < len(desc) and paren_count > 0:
+                    if desc[url_end] == "(":
+                        paren_count += 1
+                    elif desc[url_end] == ")":
+                        paren_count -= 1
+                    url_end += 1
+                if paren_count == 0:
+                    idx = url_end
+                else:
+                    result.append(desc[start:alt_close + 2])
+                    idx = alt_close + 2
+            else:
+                result.append(desc[start:alt_close + 1])
+                idx = alt_close + 1
+        payload["description"] = "".join(result).strip()
 
     # Upload local files to Frappe and build the attachments JSON array
     import json

@@ -554,9 +554,8 @@ def _erp_support_extract(query: str, route_config: dict, schema: dict) -> dict:
         ],
         "description": [
             r"\bdescription\s*[:=]\s*(.+)$",
-            r"\bdescription\s+(.+)$",
             r"\bissue\s*[:=]\s*(.+)$",
-            r"\bissue\s+(.+)$",
+            r"(?:^|\.\s+|;\s+)(?:description|issue)\s+(.+)$",
         ],
         "feedback": [
             r"\bfeedback\s*[:=]\s*(.+?)(?=\s+\bhelps\b|\s+\bratings?\b|$)",
