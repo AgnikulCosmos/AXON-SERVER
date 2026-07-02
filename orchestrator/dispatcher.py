@@ -75,7 +75,11 @@ async def check_employee_privacy(query: str, params: dict = None) -> str | None:
             return "I cannot disclose information about other employees."
             
     if params:
-        for val in params.values():
+        # Fields that legitimately contain URLs/metadata, not employee PII
+        _skip_privacy_fields = {"attachments", "filepath", "upload_id"}
+        for key, val in params.items():
+            if key in _skip_privacy_fields:
+                continue
             if not val or not isinstance(val, str):
                 continue
             val_lower = val.lower()
@@ -920,7 +924,12 @@ async def _run_agent(query: str, session_id: str | None = None):
             result = "No matching ERP route could be resolved for your query."
 
         logger.info("Result for ERP route: %s (type: %s)", result, type(result))
-        result_str = await sanitize_or_block_response(str(result))
+        # ERP ticket creation responses legitimately contain dev employee IDs (assigned dev)
+        # so we skip the sanitize/block check only for the erp_tickets_create route.
+        if route_name == "erp_tickets_create":
+            result_str = str(result)
+        else:
+            result_str = await sanitize_or_block_response(str(result))
         sys.stdout.write(f"{MARKER_FINAL_START}\n")
         await stream_text_word_by_word(result_str)
         sys.stdout.write(f"{MARKER_FINAL_END}\n")
