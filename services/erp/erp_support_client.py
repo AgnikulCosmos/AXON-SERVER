@@ -136,7 +136,7 @@ async def _validate_and_fix_app_name(params: dict, fields: list) -> tuple[dict, 
                     fixed_params["app_name"] = normalized
                 else:
                     missing.append(field)
-                    fixed_params["_app_name_error"] = f"❌ **'{raw_app_name}'** is not a recognized ERP application. Please specify one of the valid applications (e.g., *Fleet Management*, *HR Operations*, etc.)."
+                    fixed_params["_app_name_error"] = f"**'{raw_app_name}'** is not a recognized ERP application. Please specify one of the valid applications (e.g., *Fleet Management*, *HR Operations*, etc.)."
         elif params.get(field) in (None, ""):
             missing.append(field)
     
@@ -366,14 +366,39 @@ async def _ticket_payload(params: dict) -> dict:
     # Validate image attachment file extension (images only)
     import os
     from urllib.parse import urlparse, parse_qs
-    allowed_extensions = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+    allowed_extensions = {".png"}
     files_to_check = []
     
-    # Try finding markdown images: ![alt](url)
-    md_matches = re.findall(r'!\[.*?\]\((.*?)\)', str(attachments))
-    if md_matches:
-        files_to_check.extend(md_matches)
-    else:
+    # Try finding markdown images: ![alt](url) by parsing balanced parentheses
+    attachments_str = str(attachments).strip()
+    idx = 0
+    while True:
+        start = attachments_str.find("![", idx)
+        if start == -1:
+            break
+        alt_close = attachments_str.find("]", start)
+        if alt_close == -1:
+            break
+        if alt_close + 1 < len(attachments_str) and attachments_str[alt_close + 1] == "(":
+            url_start = alt_close + 2
+            paren_count = 1
+            url_end = url_start
+            while url_end < len(attachments_str) and paren_count > 0:
+                if attachments_str[url_end] == "(":
+                    paren_count += 1
+                elif attachments_str[url_end] == ")":
+                    paren_count -= 1
+                url_end += 1
+            if paren_count == 0:
+                url = attachments_str[url_start:url_end - 1]
+                files_to_check.append(url)
+                idx = url_end
+            else:
+                idx = alt_close + 1
+        else:
+            idx = alt_close + 1
+
+    if not files_to_check:
         # Try JSON parsing
         import json
         try:
@@ -397,7 +422,7 @@ async def _ticket_payload(params: dict) -> dict:
                 elif data.get("file_id"):
                     files_to_check.append(data["file_id"])
         except Exception:
-            files_to_check.append(str(attachments).strip())
+            files_to_check.append(attachments_str)
 
     for f in files_to_check:
         parsed = urlparse(f)
@@ -410,6 +435,21 @@ async def _ticket_payload(params: dict) -> dict:
                 filename_val = query_params[key][0]
                 break
                 
+        if not filename_val and "upload_id" in query_params:
+            upload_id = query_params["upload_id"][0]
+            uploads_dir = "/app/uploads"
+            if not os.path.exists(uploads_dir):
+                uploads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads"))
+            
+            session_upload_dir = os.path.join(uploads_dir, upload_id)
+            if os.path.isdir(session_upload_dir):
+                try:
+                    files = os.listdir(session_upload_dir)
+                    if files:
+                        filename_val = files[0]
+                except Exception:
+                    pass
+
         check_target = filename_val if filename_val else parsed.path
         clean_target = check_target.lower().strip()
         ext = os.path.splitext(clean_target)[1]
@@ -420,8 +460,8 @@ async def _ticket_payload(params: dict) -> dict:
                 raise MissingParametersError(
                     ["attachments"],
                     extra_context=(
-                        "❌ **Invalid file type.** Only image attachments (PNG, JPG, JPEG, GIF, WEBP) are allowed for ERP support tickets.\n\n"
-                        "Please upload a valid image/screenshot showing the issue."
+                        "**Invalid file type.** Only PNG image attachments are allowed for ERP support tickets.\n\n"
+                        "Please upload a valid PNG image/screenshot showing the issue."
                     )
                 )
 
