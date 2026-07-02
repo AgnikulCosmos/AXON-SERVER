@@ -317,7 +317,7 @@ async def format_erp_support_response(plan: dict, response: dict) -> str:
                         parts.append(f"Frontend: {fe_dev}")
                     if be_dev:
                         parts.append(f"Backend: {be_dev}")
-                    dev_line = f"\n👤 **Assigned to:** {', '.join(parts)}"
+                    dev_line = f"\n**Assigned to:** {', '.join(parts)}"
                 return f"{message} Reference ID: **{name}**{dev_line}"
             return f"{message} Reference ID: {name}"
         return message
