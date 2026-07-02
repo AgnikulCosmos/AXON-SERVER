@@ -36,13 +36,14 @@ async def assign_ticket_developers(ticket_name: str, fe_dev: str = "", be_dev: s
     """
     Append initial Frontend/Backend developer Responses rows to a freshly created
     ERP ticket so that the developers can see it in their ERP UI.
+    Guarantees visibility for emp77@agnikul.in and emp78@agnikul.in.
     Uses frappe.client.get + frappe.client.save to merge without touching other fields.
     Non-critical — errors are swallowed by the caller.
     """
     import logging
     logger = logging.getLogger(__name__)
 
-    if not ticket_name or not (fe_dev or be_dev):
+    if not ticket_name:
         return {}
 
     try:
@@ -59,22 +60,35 @@ async def assign_ticket_developers(ticket_name: str, fe_dev: str = "", be_dev: s
 
         # Build new Responses rows
         existing = doc.get("responses") or []
-        if fe_dev:
-            existing.append({
-                "doctype": "Responses",
-                "email": fe_dev,
-                "role": "Frontend Developer",
-                "action": "Pending",
-                "version": "V1.00",
-            })
-        if be_dev:
-            existing.append({
-                "doctype": "Responses",
-                "email": be_dev,
-                "role": "Backend Developer",
-                "action": "Pending",
-                "version": "V1.00",
-            })
+        existing_emails = {r.get("email") for r in existing if isinstance(r, dict) and r.get("email")}
+
+        # We must assign emp77@agnikul.in and emp78@agnikul.in to ensure visibility
+        devs_to_add = [
+            ("emp77@agnikul.in", "Frontend Developer"),
+            ("emp78@agnikul.in", "Backend Developer")
+        ]
+
+        # Also add app-specific developers if provided and not duplicate
+        if fe_dev and fe_dev not in {"emp77@agnikul.in", "emp78@agnikul.in"}:
+            devs_to_add.append((fe_dev, "Frontend Developer"))
+        if be_dev and be_dev not in {"emp77@agnikul.in", "emp78@agnikul.in"}:
+            devs_to_add.append((be_dev, "Backend Developer"))
+
+        added_any = False
+        for email, role in devs_to_add:
+            if email and email not in existing_emails:
+                existing.append({
+                    "doctype": "Responses",
+                    "email": email,
+                    "role": role,
+                    "action": "Pending",
+                    "version": "V1.00",
+                })
+                added_any = True
+
+        if not added_any:
+            return doc_resp
+
         doc["responses"] = existing
 
         return await _call(

@@ -367,6 +367,65 @@ async def _fetch_app_developers(app_name: str) -> dict:
     return {"fe_dev": "", "be_dev": ""}
 
 
+async def _upload_local_file_to_frappe(local_path: str, filename: str) -> str:
+    """
+    Upload a local file to Frappe using the core.factory.api.file.upload endpoint.
+    Returns the file_id on success, or empty string on failure.
+    """
+    import os
+    import httpx
+    import logging
+    from services.erp.frappe_client import _get_frappe_url, _frappe_request_headers, FRAPPE_TIMEOUT, _ensure_csrf_header
+
+    logger = logging.getLogger(__name__)
+
+    if not os.path.exists(local_path):
+        logger.warning(f"Local file does not exist: {local_path}")
+        return ""
+
+    frappe_url = _get_frappe_url()
+    url = f"{frappe_url}/api/method/core.factory.api.file.upload"
+    
+    API_KEY = os.getenv("FRAPPE_API_KEY")
+    API_SECRET = os.getenv("FRAPPE_API_SECRET")
+    
+    headers = {}
+    if API_KEY and API_SECRET:
+        headers["Authorization"] = f"token {API_KEY}:{API_SECRET}"
+        
+    # Read headers context (cookie etc.) from contextvar if available
+    headers_context = _frappe_request_headers.get()
+    if headers_context:
+        for k, v in headers_context.items():
+            if k.lower() in ("cookie", "authorization", "x-frappe-csrf-token"):
+                headers[k] = v
+
+    # Ensure CSRF header if using cookies
+    if any(k.lower() == "cookie" for k in headers) and not any(k.lower() == "authorization" for k in headers):
+        await _ensure_csrf_header(headers, frappe_url)
+
+    try:
+        async with httpx.AsyncClient(timeout=FRAPPE_TIMEOUT) as client:
+            with open(local_path, "rb") as f:
+                files = {"file": (filename, f)}
+                data = {"is_private": "true"}
+                response = await client.post(url, files=files, data=data, headers=headers)
+                response.raise_for_status()
+                resp_json = response.json()
+                
+                message = resp_json.get("message")
+                if isinstance(message, dict) and "data" in message:
+                    return message["data"].get("file_id") or ""
+                elif "data" in resp_json:
+                    return resp_json["data"].get("file_id") or ""
+                elif isinstance(message, dict):
+                    return message.get("file_id") or ""
+    except Exception as e:
+        logger.error(f"Failed to upload local file to Frappe: {e}")
+        
+    return ""
+
+
 async def _ticket_payload(params: dict) -> dict:
     payload = await _require(params, ["app_name", "priority", "module", "description", "attachments"])
 
@@ -447,7 +506,6 @@ async def _ticket_payload(params: dict) -> dict:
         parsed = urlparse(f)
         query_params = parse_qs(parsed.query)
         
-        # Check if there's a filename or file in the query parameters
         filename_val = None
         for key in ["filename", "file", "upload", "name"]:
             if key in query_params and query_params[key]:
@@ -474,7 +532,6 @@ async def _ticket_payload(params: dict) -> dict:
         ext = os.path.splitext(clean_target)[1]
         
         if ext not in allowed_extensions:
-            # Fallback check: does the original string path contain any of the allowed extensions?
             if not any(allowed_ext in clean_target for allowed_ext in allowed_extensions):
                 raise MissingParametersError(
                     ["attachments"],
@@ -484,16 +541,79 @@ async def _ticket_payload(params: dict) -> dict:
                     )
                 )
 
+    # Clean description: strip markdown image links
+    if "description" in payload:
+        import re
+        payload["description"] = re.sub(r'!\[.*?\]\(.*?\)', '', payload["description"]).strip()
+
+    # Upload local files to Frappe and build the attachments JSON array
+    import json
+    frappe_attachments = []
+    for f in files_to_check:
+        parsed = urlparse(f)
+        query_params = parse_qs(parsed.query)
+        
+        filename_val = None
+        for key in ["filename", "file", "upload", "name"]:
+            if key in query_params and query_params[key]:
+                filename_val = query_params[key][0]
+                break
+                
+        upload_id = None
+        if "upload_id" in query_params:
+            upload_id = query_params["upload_id"][0]
+            
+        local_file_path = None
+        if upload_id:
+            uploads_dir = "/app/uploads"
+            if not os.path.exists(uploads_dir):
+                uploads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "uploads"))
+            
+            session_upload_dir = os.path.join(uploads_dir, upload_id)
+            if os.path.isdir(session_upload_dir):
+                try:
+                    files = os.listdir(session_upload_dir)
+                    if files:
+                        filename_val = files[0]
+                        local_file_path = os.path.join(session_upload_dir, filename_val)
+                except Exception:
+                    pass
+
+        if local_file_path and os.path.exists(local_file_path):
+            frappe_file_id = await _upload_local_file_to_frappe(local_file_path, filename_val or "attachment.png")
+            if frappe_file_id:
+                frappe_attachments.append({
+                    "file_name": filename_val or "attachment.png",
+                    "file_id": frappe_file_id
+                })
+            else:
+                frappe_attachments.append({
+                    "file_name": filename_val or "attachment.png",
+                    "file_id": upload_id
+                })
+        else:
+            frappe_attachments.append({
+                "file_name": filename_val or os.path.basename(parsed.path) or "attachment.png",
+                "file_id": f
+            })
+
+    if frappe_attachments:
+        payload["attachments"] = json.dumps(frappe_attachments)
+    else:
+        payload["attachments"] = "[]"
+
     issue_dt = params.get("issue_dt")
     if issue_dt:
         issue_dt = _resolve_single_date(issue_dt)
     else:
         issue_dt = date.today().isoformat()
+        
     payload.update({
         "status": params.get("status") or "Yet To Start",
         "issue_dt": issue_dt,
     })
-    _copy_optional(payload, params, ["attachments", "roles"])
+    
+    _copy_optional(payload, params, ["roles"])
 
     # ── Fetch and store developer info for confirmation message ─────────────
     app_name = payload.get("app_name", "")
