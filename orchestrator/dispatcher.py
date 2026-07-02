@@ -602,10 +602,37 @@ async def _run_agent(query: str, session_id: str | None = None):
             if key and val:
                 structured_params[key] = val
 
-        # Auto-detect markdown image links for attachments field
-        md_image_match = _re.search(r'(!\[.*?\]\(.*?\))', query)
-        if md_image_match and "attachments" in missing_fields and "attachments" not in structured_params:
-            structured_params["attachments"] = md_image_match.group(1).strip()
+        # Auto-detect markdown image links for attachments field (balanced-parenthesis parser)
+        if "attachments" in missing_fields and "attachments" not in structured_params:
+            _md_matches = []
+            _q = query
+            _idx = 0
+            while True:
+                _start = _q.find("![", _idx)
+                if _start == -1:
+                    break
+                _alt_close = _q.find("]", _start)
+                if _alt_close == -1:
+                    break
+                if _alt_close + 1 < len(_q) and _q[_alt_close + 1] == "(":
+                    _url_start = _alt_close + 2
+                    _paren = 1
+                    _url_end = _url_start
+                    while _url_end < len(_q) and _paren > 0:
+                        if _q[_url_end] == "(": _paren += 1
+                        elif _q[_url_end] == ")": _paren -= 1
+                        _url_end += 1
+                    if _paren == 0:
+                        _alt = _q[_start + 2:_alt_close]
+                        _url = _q[_url_start:_url_end - 1]
+                        _md_matches.append(f"![{_alt}]({_url})")
+                        _idx = _url_end
+                    else:
+                        _idx = _alt_close + 1
+                else:
+                    _idx = _alt_close + 1
+            if _md_matches:
+                structured_params["attachments"] = "\n".join(_md_matches)
 
         # Flexible parameter mapping for common user variations
         for desc_key in ["description", "item_description"]:
@@ -636,6 +663,7 @@ async def _run_agent(query: str, session_id: str | None = None):
             has_extracted_params = True
 
         # Extract still missing fields using parameter_extractor
+        # Exclude 'attachments' if already captured above (prevents LLM from clobbering valid image URL)
         still_missing = [f for f in missing_fields if f not in new_params]
         if still_missing:
             route_config = get_erp_route_config(pending_route)
@@ -649,6 +677,9 @@ async def _run_agent(query: str, session_id: str | None = None):
                 import asyncio as _asyncio
                 extracted = await _asyncio.to_thread(extract_parameters, query, temp_config)
                 if extracted:
+                    # Never let the extractor overwrite an already-resolved 'attachments' value
+                    if "attachments" in new_params and "attachments" in extracted:
+                        del extracted["attachments"]
                     new_params.update(extracted)
                     has_extracted_params = True
 
