@@ -686,14 +686,12 @@
         "Recruitment Management"
       ],
       "feedback": "string",
-      "ratings": "number",
-      "attachments": "string"
+      "ratings": "number"
     },
     "field_mapping": {
       "app_name": "app_name",
       "feedback": "feedback",
-      "ratings": "ratings",
-      "attachments": "attachments"
+      "ratings": "ratings"
     },
     "available_fields": [
       "name",
@@ -701,7 +699,6 @@
       "type",
       "feedback",
       "ratings",
-      "attachments",
       "raised_by"
     ]
   },
@@ -765,15 +762,13 @@
         "High"
       ],
       "feedback": "string",
-      "helps": "string",
-      "attachments": "string"
+      "helps": "string"
     },
     "field_mapping": {
       "app_name": "app_name",
       "priority": "priority",
       "feedback": "feedback",
-      "helps": "helps",
-      "attachments": "attachments"
+      "helps": "helps"
     },
     "available_fields": [
       "name",
@@ -782,7 +777,6 @@
       "priority",
       "feedback",
       "helps",
-      "attachments",
       "raised_by",
       "status"
     ]

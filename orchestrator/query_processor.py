@@ -20,17 +20,19 @@ import sys
 from typing import Any
 
 from common.routing.router import route_query
+from common.routing.router import get_erp_route_config
 from common.rag.rag_tool import rag_search
 
-from common.routing.planning import router_pipeline
+from common.routing.planning import extract_parameters, apply_defaults, select_fields
 from services.erp.erp_support_client import (
     execute_erp_support_plan,
     format_erp_support_response,
     MissingParametersError,
 )
+from services.erp.tracking_client import execute_tracking_plan, format_tracking_response
 from orchestrator.dispatcher import _friendly_erp_error
 from services.erp.frappe_client import set_frappe_request_headers, reset_frappe_request_headers
-from orchestrator.qwen_agent import run_qwen, summarize_tool_output
+from orchestrator.qwen_agent import summarize_tool_output
 from services.tools.tool_dispatcher import dispatch_tool
 
 
@@ -76,7 +78,8 @@ async def process_query(
 
         # ── ERP Support Route ────────────────────────────────────────────
         if route.startswith("ERP_ROUTE:"):
-            return await _process_erp_query(query)
+            route_name = route.split(":", 1)[1]
+            return await _process_erp_query(query, route_name)
 
         # ── RAG Search Route ─────────────────────────────────────────────
         if route == "RAG":
@@ -95,38 +98,80 @@ async def process_query(
 
         # ── Organization/QWEN Route ──────────────────────────────────────
         if route == "QWEN":
-            result = await run_qwen(query)
-            return {"query_type": "organization", "status": "ok", "message": result}
+            tool_name, tool_result = await dispatch_tool(query)
+            message = await summarize_tool_output(
+                user_query=query,
+                tool_name=tool_name,
+                tool_data=tool_result,
+            )
+            return {"query_type": "search", "status": "ok", "message": str(message).strip()}
 
         # ── Default: Organization Q&A ───────────────────────────────────
-        result = await run_qwen(query)
-        return {"query_type": "organization", "status": "ok", "message": result}
+        tool_name, tool_result = await dispatch_tool(query)
+        message = await summarize_tool_output(
+            user_query=query,
+            tool_name=tool_name,
+            tool_data=tool_result,
+        )
+        return {"query_type": "search", "status": "ok", "message": str(message).strip()}
 
     finally:
         reset_frappe_request_headers(token)
 
 
-async def _process_erp_query(query: str) -> dict[str, Any]:
-    plan = router_pipeline.process(query)
-    if not plan or not (
-        plan.get("route_name", "").startswith("erp_")
-        or plan.get("route_name") in ("food_log_list", "pr_leave_tracker", "lost_found_list", "lost_found_create", "track_request")
-    ):
+async def _process_erp_query(query: str, route_name: str) -> dict[str, Any]:
+    allowed_routes = {
+        "erp_tickets_create",
+        "erp_feedback_create",
+        "erp_suggestion_create",
+        "lost_found_create",
+        "lost_found_list",
+        "food_log_list",
+        "pr_leave_tracker",
+        "track_request",
+    }
+    if route_name not in allowed_routes:
         return {
             "query_type": "erp",
             "status": "error",
             "message": "Could not resolve an ERP Support action from your message.",
         }
 
+    route_config = get_erp_route_config(route_name)
+    if not route_config:
+        return {
+            "query_type": "erp",
+            "status": "error",
+            "message": "Could not resolve an ERP Support action from your message.",
+        }
+
+    extracted = await asyncio.to_thread(extract_parameters, query, route_config)
+    resolved = apply_defaults(extracted, route_config)
+    plan = {
+        "route_name": route_name,
+        "method": route_config["frappe_method"],
+        "doctype": route_config.get("doctype", ""),
+        "parameters": resolved,
+        "filters": None,
+        "fields": select_fields(query, route_config, resolved),
+        "confidence": 1.0,
+    }
+
     try:
-        response = await execute_erp_support_plan(plan)
-        message = await format_erp_support_response(plan, response)
+        if route_name in ("track_request", "food_log_list", "pr_leave_tracker"):
+            response = await execute_tracking_plan(plan)
+            message = format_tracking_response(response)
+        else:
+            response = await execute_erp_support_plan(plan)
+            message = await format_erp_support_response(plan, response)
         return {"query_type": "erp", "status": "ok", "message": message}
     except MissingParametersError as e:
         return {
             "query_type": "erp",
             "status": "missing",
             "missing_fields": e.fields,
+            "upload_enabled": route_name == "erp_tickets_create",
+            "upload_field": "attachments" if route_name == "erp_tickets_create" else None,
             "message": str(e),
         }
     except Exception as exc:

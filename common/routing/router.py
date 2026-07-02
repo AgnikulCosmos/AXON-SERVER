@@ -185,11 +185,27 @@ _ERP_VOCAB = {
     "casual", "sick", "allocated", "remaining", "taken",
 }
 
+_COMMON_TYPO_MAP = {
+    "yoy": "you",
+    "yu": "you",
+    "u": "you",
+    "leava": "leave",
+    "leav": "leave",
+    "balnce": "balance",
+    "balence": "balance",
+    "tikcet": "ticket",
+    "tickt": "ticket",
+    "fedback": "feedback",
+    "sugestion": "suggestion",
+    "suggession": "suggestion",
+    "reqid": "req_id",
+}
+
 def _normalize_query(query: str) -> str:
     """
     Correct obvious typos in domain-specific words before embedding.
-    Only fixes words that are >=4 chars and have a close match (cutoff 0.70)
-    so short words and proper nouns are left untouched.
+    Common short typos are mapped explicitly; fuzzy correction is limited to
+    domain words so proper nouns and request IDs are left untouched.
     """
     import difflib
     words = query.split()
@@ -197,8 +213,22 @@ def _normalize_query(query: str) -> str:
     for word in words:
         # Strip punctuation for matching, preserve it for output
         stripped = word.strip("!?.,;:'\"").lower()
+        if re.search(r"\d", stripped) or "_" in stripped or "-" in stripped:
+            corrected.append(word)
+            continue
+
+        fixed = _COMMON_TYPO_MAP.get(stripped)
+        if fixed:
+            prefix = word[: len(word) - len(word.lstrip("!?.,;:'\""))]
+            suffix = word[len(word.rstrip("!?.,;:'\"")):]
+            if word and word[0].isupper():
+                fixed = fixed.capitalize()
+            corrected.append(prefix + fixed + suffix)
+            logger.debug(f"[QueryNormalizer] Corrected {stripped!r} → {fixed!r}")
+            continue
+
         if len(stripped) >= 4 and stripped not in _ERP_VOCAB:
-            matches = difflib.get_close_matches(stripped, _ERP_VOCAB, n=1, cutoff=0.80)
+            matches = difflib.get_close_matches(stripped, _ERP_VOCAB, n=1, cutoff=0.78)
             if matches:
                 # Replace the stripped part, preserving original case pattern and surrounding punctuation
                 prefix = word[: len(word) - len(word.lstrip("!?.,;:'\""))]
@@ -344,12 +374,14 @@ async def route_query(query: str, exclude_how_to: bool = False) -> str:
             is_valid = await _confirm_route_with_llm(query, route_desc)
             if not is_valid:
                 logger.info(f"[Router] LLM rejected candidate match {route_name} for query {query!r}")
-                route_name = "QWEN"
+                route_name = "TOOLS"
 
         # 2. Create vs List Disambiguation
         if route_name not in TOP_LEVEL_CATEGORIES:
             route_name = await _disambiguate_route_with_llm(query, route_name)
 
+        if route_name == "QWEN":
+            return "TOOLS"
         if route_name in TOP_LEVEL_CATEGORIES:
             return route_name
         elif route_name in ERP_ROUTE_NAMES:
@@ -369,5 +401,4 @@ async def route_query(query: str, exclude_how_to: bool = False) -> str:
                 logger.info(f"[Router] Intercepting disallowed ERP route {route_name} for query {query!r} -> Forcing RAG")
                 return "RAG"
 
-    return "QWEN"
-
+    return "TOOLS"

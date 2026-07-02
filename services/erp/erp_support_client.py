@@ -487,15 +487,11 @@ async def _ticket_payload(params: dict) -> dict:
 
 
 async def _feedback_payload(params: dict) -> dict:
-    payload = await _require(params, ["app_name", "feedback", "ratings"])
-    _copy_optional(payload, params, ["attachments"])
-    return payload
+    return await _require(params, ["app_name", "feedback", "ratings"])
 
 
 async def _suggestion_payload(params: dict) -> dict:
-    payload = await _require(params, ["app_name", "priority", "feedback", "helps"])
-    _copy_optional(payload, params, ["attachments"])
-    return payload
+    return await _require(params, ["app_name", "priority", "feedback", "helps"])
 
 
 def _list_params(params: dict) -> dict:

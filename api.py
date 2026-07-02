@@ -662,9 +662,14 @@ async def get_session_status(session_id: str):
     from orchestrator.dispatcher import PENDING_ERP_SESSIONS
     pending = PENDING_ERP_SESSIONS.get(session_id)
     pending_route = pending.get("route_name") if pending else None
+    missing_fields = pending.get("_missing_fields") if pending else []
+    upload_enabled = bool(pending_route == "erp_tickets_create")
     return {
         "session_id": session_id,
-        "pending_route": pending_route
+        "pending_route": pending_route,
+        "missing_fields": missing_fields or [],
+        "upload_enabled": upload_enabled,
+        "upload_field": "attachments" if upload_enabled else None,
     }
 
 
