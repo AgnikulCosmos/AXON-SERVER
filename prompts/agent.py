@@ -70,23 +70,22 @@ ERP Data:
 Return only the final answer in natural language.
 """
 
-TITLE_GENERATION_PROMPT = """Write a short 3-word title for the following conversation.
+TITLE_GENERATION_PROMPT = """Write a short 4-7 word title for the following conversation.
 
 Conversation:
 {conversation_summary}
 
 Title:"""
 
-CONVERSATION_SUMMARIZATION_PROMPT = """Summarize the following conversation in one short sentence. Keep it extremely concise.
+CONVERSATION_SUMMARIZATION_PROMPT = """Identify the main topic or action from this conversation in one sentence. Be specific about what the user wanted or did.
 
 Conversation:
 {conversation}
 
-Summary:"""
+Topic:"""
 
-TITLE_FROM_SUMMARY_PROMPT = """Write a short 3-word title (without punctuation, asterisks, hashtags or markdown) representing the following summary.
+TITLE_FROM_SUMMARY_PROMPT = """Write a concise chat title (4 to 7 words, no punctuation, no markdown) that clearly describes the following topic.
 
-Summary: {summary}
+Topic: {summary}
 
 Title:"""
-

@@ -331,13 +331,16 @@ async def generate_title_endpoint(req: TitleGenerationRequest):
 
         # -------------------------------
         # BATCHING LOGIC (Enhanced for early turns)
+        # Wait for at least 2 messages (one user + one assistant) before first title
+        # so we have a complete exchange to name the conversation from.
         # -------------------------------
         current_completed_batch = total_messages // 5
         last_completed_batch = last_title_count // 5 if last_title_count > 0 else 0
 
-        if last_title_count == 0 and total_messages >= 1:
+        if last_title_count == 0 and total_messages >= 2:
+            # First title: require at least one complete exchange (user + assistant)
             should_generate = True
-        elif total_messages <= 6 and total_messages > last_title_count:
+        elif last_title_count > 0 and total_messages <= 6 and total_messages > last_title_count:
             should_generate = True
         elif current_completed_batch > last_completed_batch:
             should_generate = True
@@ -423,22 +426,23 @@ async def generate_title_endpoint(req: TitleGenerationRequest):
             
             # Step 1: Summarize context
             sum_prompt = CONVERSATION_SUMMARIZATION_PROMPT.format(conversation=conversation_text)
-            summary = await _call_ollama(sum_prompt, max_tokens=100)
+            summary = await _call_ollama(sum_prompt, max_tokens=150)
             if not summary:
-                summary = conversation_text[:200]
+                summary = conversation_text[:300]
 
             # Step 2: Generate title from summary
             title_prompt = TITLE_FROM_SUMMARY_PROMPT.format(summary=summary)
-            title = await _call_ollama(title_prompt, max_tokens=30)
+            title = await _call_ollama(title_prompt, max_tokens=40)
             
             # Remove *, # like markdown styling
             import re as _re
             title = _re.sub(r'[*#_`~]', '', title).strip()
             title = title.strip("\"'").strip()
 
-            if len(title) > 60:
-                title = title[:57] + "..."
-            elif len(title) < 3:
+            # Trim to a sane length: max 70 chars (allows 4-7 word titles comfortably)
+            if len(title) > 70:
+                title = title[:67] + "..."
+            elif len(title) < 4:
                 title = get_fallback_title()
 
             return {
